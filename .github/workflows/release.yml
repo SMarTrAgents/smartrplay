@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Build DEB package
+        run: |
+          python build.py --target=deb || echo "DEB build failed, continuing..."
+
+      - name: Build AppImage
+        run: |
+          python build.py --target=appimage || echo "AppImage build failed, continuing..."
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            build/linux/build_deb/*.deb
+            build/linux/build_appimage/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

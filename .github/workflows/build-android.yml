@@ -1,0 +1,50 @@
+name: Build Android TV APK
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-dev zlib1g-dev libffi-dev libssl-dev \
+            libsqlite3-dev libncurses-dev libbz2-dev libreadline-dev liblzma-dev \
+            git zip unzip ccache autoconf automake libtool pkg-config
+
+      - name: Install buildozer and dependencies
+        run: |
+          pip install buildozer "cython==3.0.11" appdirs colorama jinja2 sh \
+            meson ninja build toml packaging setuptools wheel
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Build APK
+        run: |
+          cd android_tv
+          yes | buildozer -v android debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMarTrPlay-Android-TV
+          path: android_tv/bin/*.apk
+
+      - name: Release APK
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android_tv/bin/*.apk
+          generate_release_notes: true

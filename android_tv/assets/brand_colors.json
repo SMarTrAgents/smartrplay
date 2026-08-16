@@ -1,0 +1,13 @@
+{
+    "bg_deep": "#0A0F1E",
+    "bg_card": "#121A2E",
+    "border": "#232D45",
+    "text_primary": "#F5F7FA",
+    "text_secondary": "#9BA5B7",
+    "accent_cyan": "#1bf1fb",
+    "accent_purple": "#8D7CF6",
+    "accent_violet": "#371689",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "error": "#EF4444"
+}
