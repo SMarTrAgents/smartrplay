@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v5.0.0] — VLC, Fullscreen & Master Search — 2026-09-20
+
+### Changed
+- 🎬 **Playback now runs on libVLC** instead of ffplay. ffplay reads keys only from its own
+  SDL window, so pause, seek, mute and volume did nothing and there was no position
+  feedback. All of that works now, including hardware acceleration, subtitles and
+  multiple audio tracks.
+
+### Added
+- 🖥️ **Fullscreen with a real control bar** — double-click the picture to enter and leave.
+  The embedded video window stays in place, so the stream never restarts. Buttons are
+  64 px and the font is 20 px, built for low vision.
+- 📡 **Zapping without leaving fullscreen** — arrow keys switch channel, `L` opens a
+  searchable channel list on top of the running picture.
+- 📺 **Episode zapping** — series episodes now play in the application's video area instead
+  of a separate VLC window, and arrow keys move through the season.
+- 🔍 **Master search across all categories** in movies and series, not just the loaded one.
+- 📦 **Windows installer** (Inno Setup, per-user, no admin rights) and **Linux AppImage**
+  (one file, no installation), both built and start-tested by GitHub Actions.
+- 🧪 **tests/** — four acceptance runs with 70 checks that measure the running window.
+
+### Fixed
+- 💥 **Crash on close** — `QThread: Destroyed while thread is still running`. Threads are
+  now detached and parked instead of being torn down mid-run.
+- 📜 **Series would not load at all.** The API timeout was too short: the provider needs
+  12 to 17 seconds for series, the limit was 8. Separate timeouts now: 8 s for lists,
+  45 s for content.
+- 🗂️ **22 037 series were unreachable.** The provider's category list named 49 ids while
+  the catalogue used 207. Entries without a known category now get a collection by
+  language, 88 categories instead of 49.
+- 🔒 **Diagnostics server was bound to 0.0.0.0** and served the subscription credentials in
+  clear text without any authentication. It is bound to localhost with a token now.
+- 🪟 **Windows startup** — `import resource` does not exist there.
+- 📁 **Read-only install locations** — the log folder was created next to the executable,
+  which fails inside an AppImage and in Program Files. Logs go to the user folder now.
+- 🖱️ **Visible scrollbars, larger fonts, keyboard operation** throughout.
+- ⚡ **Loading is much faster** — the full catalogue is fetched in one request where the
+  provider supports it: live 1.1 s instead of 26 s.
+
+---
+
 ## [v4.0.0] — Advanced & Cast
 
 ### Added

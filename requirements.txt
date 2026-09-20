@@ -1,0 +1,5 @@
+# SMarTrPlay — Laufzeitabhaengigkeiten
+# SMarTrAgents.ai by AKATONGIE with Fable 5 (Anthropic). MIT license.
+PyQt5>=5.15
+python-vlc>=3.0.18
+requests>=2.28

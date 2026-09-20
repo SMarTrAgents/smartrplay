@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=SMarTrPlay
+Comment=SMarTrAgents IPTV Player — M3U, M3U+, Xtream Codes
+Comment[de]=SMarTrAgents IPTV Player — M3U, M3U+, Xtream Codes
+Exec=smartrplay %U
+Icon=smartrplay
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;TV;
+Keywords=IPTV;Player;TV;Streaming;M3U;Xtream;
+StartupNotify=true
+MimeType=application/x-mpegurl;audio/x-mpegurl;

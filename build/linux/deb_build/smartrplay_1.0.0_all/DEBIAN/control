@@ -1,0 +1,26 @@
+Package: smartrplay
+Version: 1.0.0
+Section: video
+Priority: optional
+Architecture: all
+Depends: python3, python3-pyqt5, ffmpeg
+Recommends: python3-requests, python3-urllib3
+Suggests: vlc
+Maintainer: SMarTrAgents <akatongie@smartragents.ai>
+Description: SMarTrPlay — SMarTrAgents IPTV Player
+ IPTV Player for M3U, M3U+ and Xtream Codes API playlists.
+ Features:
+  * M3U/M3U+ playlist support
+  * Xtream Codes API integration
+  * Chromecast/DLNA casting
+  * EPG (Electronic Program Guide)
+  * Video on Demand (VoD) browser
+  * Series browser with artwork
+  * Mini player and Picture-in-Picture
+  * Multi-profile support
+  * Remote control support
+  * Subtitle recording
+  * Catchup TV support
+  * Custom SMarTr dark theme
+ .
+ Built by SMartrAgents.

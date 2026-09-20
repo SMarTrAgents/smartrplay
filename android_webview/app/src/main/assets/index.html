@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>SMarTrPlay</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <div class="logo-icon">▶</div>
+        <div class="logo-text">SMarTrPlay</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary btn-small" id="settings-btn" tabindex="0">⚙ Providers</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" id="view-content" style="display:none">
+      <div class="tab active" data-view="live" tabindex="0">📺 Live TV</div>
+      <div class="tab" data-view="vod" tabindex="0">🎬 Movies</div>
+      <div class="tab" data-view="series" tabindex="0">📂 Series</div>
+      <div style="flex:1"></div>
+      <input type="text" class="search-input" id="search-input" placeholder="🔍 Search..." style="width:200px;margin:4px 0">
+    </div>
+
+    <!-- Provider Manager View -->
+    <div id="view-providers" class="view-section" style="display:none;flex:1;overflow-y:auto">
+      <div class="form-container">
+        <div class="form-title">Provider hinzufügen</div>
+        <div class="form-subtitle">Verbinde dich mit einem Xtream Codes Server oder einer M3U Playlist</div>
+
+        <!-- Xtream Form -->
+        <form id="xtream-form">
+          <div class="form-group">
+            <label class="form-label">Xtream Codes Server</label>
+            <input type="text" class="form-input" id="xtream-name" placeholder="Provider Name (z.B. Mein IPTV)" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Server URL</label>
+            <input type="text" class="form-input" id="xtream-server" placeholder="http://server.com:8080" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Benutzername</label>
+            <input type="text" class="form-input" id="xtream-username" placeholder="Username" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Passwort</label>
+            <input type="password" class="form-input" id="xtream-password" placeholder="Password" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Xtream Provider hinzufügen</button>
+        </form>
+
+        <hr style="border-color:var(--border-color);margin:24px 0">
+
+        <!-- M3U Form -->
+        <form id="m3u-form">
+          <div class="form-group">
+            <label class="form-label">M3U Playlist</label>
+            <input type="text" class="form-input" id="m3u-name" placeholder="Provider Name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">M3U URL</label>
+            <input type="text" class="form-input" id="m3u-url" placeholder="http://server.com/playlist.m3u" required>
+          </div>
+          <button type="submit" class="btn btn-violet btn-block">M3U Provider hinzufügen</button>
+        </form>
+      </div>
+
+      <!-- Provider List -->
+      <div style="max-width:500px;margin:0 auto 40px">
+        <div class="form-title" style="font-size:18px;margin-bottom:16px">Gespeicherte Provider</div>
+        <div class="provider-list" id="provider-list"></div>
+      </div>
+    </div>
+
+    <!-- Main Content View -->
+    <div id="view-content-area" class="main-container" style="display:none;flex:1">
+      <!-- Sidebar -->
+      <div class="sidebar" id="sidebar">
+        <div class="sidebar-title">Categories</div>
+        <div class="empty-state" style="padding:20px;font-size:13px">Select a provider first</div>
+      </div>
+
+      <!-- Content -->
+      <div class="content" id="content-area">
+        <div class="content-title">Welcome to SMarTrPlay</div>
+        <div class="empty-state">
+          <div class="empty-state-icon">📺</div>
+          <div>Select a category to browse channels</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/xtream.js"></script>
+  <script src="js/m3u.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

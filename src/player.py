@@ -14,6 +14,7 @@ class PlayerBackend:
 
     def __init__(self):
         self.process = None
+        self._ytdl_process = None
         self.current_url = None
         self.volume = 80
         self.is_playing = False
@@ -44,7 +45,7 @@ class PlayerBackend:
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
                 stdin=subprocess.PIPE,
                 preexec_fn=os.setsid
             )
@@ -57,6 +58,15 @@ class PlayerBackend:
 
     def stop(self):
         """Playback stoppen."""
+        if self._ytdl_process:
+            try:
+                os.killpg(os.getpgid(self._ytdl_process.pid), signal.SIGTERM)
+            except Exception:
+                try:
+                    self._ytdl_process.terminate()
+                except Exception:
+                    pass
+            self._ytdl_process = None
         if self.process:
             try:
                 os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
@@ -118,11 +128,7 @@ class PlayerBackend:
 
     def get_errors(self):
         """Fehler-Output von ffplay abrufen."""
-        if self.process and self.process.stderr:
-            try:
-                return self.process.stderr.read().decode("utf-8", errors="ignore")
-            except Exception:
-                pass
+        # stderr ist auf DEVNULL gesetzt (Pipe-Deadlock-Vermeidung)
         return ""
 
     def play_youtube(self, url):
@@ -153,7 +159,7 @@ class PlayerBackend:
                 cmd,
                 stdin=ytdl.stdout,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
                 preexec_fn=os.setsid
             )
             ytdl.stdout.close()

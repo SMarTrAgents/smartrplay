@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+# Kill any running instances
+pkill -f "python3.*main.py.*smartrplay" 2>/dev/null || true

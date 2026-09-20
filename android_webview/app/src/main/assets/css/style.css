@@ -1,0 +1,550 @@
+/* ===== SMarTrPlay — Android TV Brand Stylesheet ===== */
+/* Brand: Dark #0A0F1E | Cyan #1bf1fb | Violet #371689 | Inter Font */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --bg-primary: #0A0F1E;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1a2332;
+  --bg-card: #151c2c;
+  --brand-cyan: #1bf1fb;
+  --brand-cyan-dim: #0d8a93;
+  --brand-violet: #371689;
+  --brand-violet-light: #5d2dc4;
+  --text-primary: #ffffff;
+  --text-secondary: #a0aec0;
+  --text-muted: #6b7280;
+  --border-color: #2d3748;
+  --focus-glow: 0 0 0 3px var(--brand-cyan);
+  --radius: 12px;
+  --transition: 0.2s ease;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ===== Layout ===== */
+#app {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: 16px 32px;
+  background: linear-gradient(180deg, rgba(10,15,30,0.95) 0%, rgba(10,15,30,0.8) 100%);
+  border-bottom: 1px solid var(--border-color);
+  height: 64px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--brand-cyan), var(--brand-violet));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.logo-text {
+  background: linear-gradient(90deg, var(--brand-cyan), #fff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+}
+
+/* ===== Main Content Area ===== */
+.main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ===== Sidebar (Categories) ===== */
+.sidebar {
+  width: 240px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: 12px;
+  flex-shrink: 0;
+}
+
+.sidebar-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  margin-bottom: 4px;
+}
+
+.category-item {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: var(--transition);
+  outline: none;
+}
+
+.category-item:hover,
+.category-item.selected {
+  background: var(--bg-tertiary);
+  color: var(--brand-cyan);
+}
+
+.category-item.selected {
+  border-left: 3px solid var(--brand-cyan);
+}
+
+/* ===== Content Area ===== */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.content-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+/* ===== Channel Grid ===== */
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.channel-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: var(--transition);
+  outline: none;
+  border: 2px solid transparent;
+}
+
+.channel-card:hover,
+.channel-card:focus-visible {
+  border-color: var(--brand-cyan);
+  box-shadow: var(--focus-glow), 0 8px 24px rgba(27,241,251,0.15);
+  transform: translateY(-2px);
+}
+
+.channel-card:focus-visible {
+  box-shadow: var(--focus-glow);
+}
+
+.channel-thumb {
+  width: 100%;
+  height: 110px;
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--brand-violet));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.8);
+  overflow: hidden;
+}
+
+.channel-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.channel-info {
+  padding: 12px;
+}
+
+.channel-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ===== Forms ===== */
+.form-container {
+  max-width: 500px;
+  margin: 40px auto;
+  background: var(--bg-card);
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.form-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.form-subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: 'Inter', sans-serif;
+  transition: var(--transition);
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--brand-cyan);
+  box-shadow: var(--focus-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ===== Buttons ===== */
+.btn {
+  padding: 14px 24px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  outline: none;
+  font-family: 'Inter', sans-serif;
+}
+
+.btn:focus-visible {
+  box-shadow: var(--focus-glow);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand-cyan), var(--brand-cyan-dim));
+  color: var(--bg-primary);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(27,241,251,0.3);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  border-color: var(--brand-cyan);
+}
+
+.btn-violet {
+  background: linear-gradient(135deg, var(--brand-violet-light), var(--brand-violet));
+  color: #fff;
+}
+
+.btn-violet:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(55,22,137,0.4);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* ===== Tabs ===== */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 14px 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 3px solid transparent;
+  transition: var(--transition);
+  outline: none;
+}
+
+.tab:hover,
+.tab.active {
+  color: var(--brand-cyan);
+  border-bottom-color: var(--brand-cyan);
+}
+
+.tab:focus-visible {
+  box-shadow: var(--focus-glow);
+}
+
+/* ===== Provider Cards ===== */
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.provider-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: var(--transition);
+  outline: none;
+}
+
+.provider-card:hover,
+.provider-card:focus-visible {
+  border-color: var(--brand-cyan);
+  box-shadow: var(--focus-glow);
+}
+
+.provider-info {
+  flex: 1;
+}
+
+.provider-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.provider-url {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.provider-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ===== Loading & States ===== */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--brand-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  text-align: center;
+  padding: 40px;
+  color: #fc8181;
+  font-size: 15px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px;
+  color: var(--text-muted);
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* ===== Video Player Page ===== */
+.player-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.player-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  background: rgba(10,15,30,0.9);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+
+.player-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.player-back {
+  margin-right: 16px;
+  cursor: pointer;
+  color: var(--brand-cyan);
+  font-size: 20px;
+  outline: none;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.player-back:focus-visible {
+  box-shadow: var(--focus-glow);
+}
+
+#video-element {
+  width: 100%;
+  flex: 1;
+  background: #000;
+}
+
+/* ===== Search ===== */
+.search-bar {
+  padding: 12px 24px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--brand-cyan);
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-cyan-dim);
+}
+
+/* ===== TV-specific: larger focus indicators ===== */
+@media (min-width: 1280px) {
+  .channel-card {
+    min-height: 180px;
+  }
+  .channel-thumb {
+    height: 120px;
+  }
+}

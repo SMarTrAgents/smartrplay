@@ -1,8 +1,12 @@
-name: Release
+name: Release (nur auf Zuruf)
+# Dieser Bauplan lief bei jeder Veroeffentlichung mit und scheiterte dabei.
+# Auf der Veroeffentlichungsseite standen dadurch rote Kreuze, was genau die
+# Besucher abschreckt, die das Projekt gewinnen soll. Er laeuft deshalb nur
+# noch auf Zuruf. Die Pakete fuer Windows und Linux entstehen in
+# build-windows.yml und build-appimage.yml.
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 
 jobs:
   release:

@@ -12,6 +12,9 @@ PYTHON=/usr/bin/python3
 export LIBGL_ALWAYS_SOFTWARE=0
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 
+# File-Descriptor-Limit erhoehen (EMFILE Prevention)
+ulimit -n 65536 2>/dev/null || true
+
 # Check ffplay
 if ! command -v ffplay &> /dev/null; then
     echo "WARNUNG: ffplay nicht gefunden. Video-Playback wird nicht funktionieren."

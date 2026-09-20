@@ -34,10 +34,18 @@ def get_font():
     return QFont("DejaVu Sans")
 
 
+# Grundschriftgröße der Anwendung in Punkten (zuvor fest 11, für bessere Lesbarkeit angehoben)
+SCHRIFT_GRUNDGROESSE = 13
+
+# Zulässiger Bereich für die Laufzeitskalierung der Anwendungsschrift (Zoomfunktion)
+SCHRIFT_MIN_GROESSE = 9
+SCHRIFT_MAX_GROESSE = 28
+
+
 def apply_theme(app):
     """SMarTr Brand Theme auf QApplication anwenden."""
     font = get_font()
-    font.setPointSize(11)
+    font.setPointSize(SCHRIFT_GRUNDGROESSE)
     app.setFont(font)
 
     palette = QPalette()
@@ -53,6 +61,23 @@ def apply_theme(app):
     app.setPalette(palette)
 
     app.setStyleSheet(QSS)
+
+
+def setze_schriftgroesse(app, punkte):
+    """Anwendungsschrift zur Laufzeit ändern (Zoomfunktion der Oberfläche).
+
+    Begrenzt die Größe auf 9 bis 28 Punkte, setzt sie per app.setFont
+    und gibt die tatsächlich gesetzte Größe in Punkten zurück.
+    """
+    try:
+        punkte = int(punkte)
+    except (TypeError, ValueError):
+        punkte = SCHRIFT_GRUNDGROESSE
+    punkte = max(SCHRIFT_MIN_GROESSE, min(SCHRIFT_MAX_GROESSE, punkte))
+    font = QFont(app.font())
+    font.setPointSize(punkte)
+    app.setFont(font)
+    return punkte
 
 
 QSS = f"""
@@ -100,18 +125,19 @@ QMenu::item:selected {{
 
 QScrollBar:vertical {{
     background: {BG_DEEP};
-    width: 8px;
+    width: 16px;
     border: none;
 }}
 
 QScrollBar::handle:vertical {{
-    background: {BORDER_LIGHT};
-    border-radius: 4px;
-    min-height: 30px;
+    background: {ACCENT_PURPLE};
+    border-radius: 5px;
+    min-height: 40px;
+    margin: 2px;
 }}
 
 QScrollBar::handle:vertical:hover {{
-    background: {ACCENT_PURPLE};
+    background: {ACCENT_CYAN};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -120,18 +146,19 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
 
 QScrollBar:horizontal {{
     background: {BG_DEEP};
-    height: 8px;
+    height: 16px;
     border: none;
 }}
 
 QScrollBar::handle:horizontal {{
-    background: {BORDER_LIGHT};
-    border-radius: 4px;
-    min-width: 30px;
+    background: {ACCENT_PURPLE};
+    border-radius: 5px;
+    min-width: 40px;
+    margin: 2px;
 }}
 
 QScrollBar::handle:horizontal:hover {{
-    background: {ACCENT_PURPLE};
+    background: {ACCENT_CYAN};
 }}
 
 QListWidget {{
@@ -157,6 +184,10 @@ QListWidget::item:hover {{
     background-color: {BG_CARD_HOVER};
 }}
 
+QListWidget:focus {{
+    border: 2px solid {ACCENT_CYAN};
+}}
+
 QLineEdit {{
     background-color: {BG_CARD};
     border: 1px solid {BORDER};
@@ -167,7 +198,7 @@ QLineEdit {{
 }}
 
 QLineEdit:focus {{
-    border: 1px solid {ACCENT_CYAN};
+    border: 2px solid {ACCENT_CYAN};
 }}
 
 QPushButton {{
@@ -189,6 +220,10 @@ QPushButton:pressed {{
     background-color: {ACCENT_VIOLET};
 }}
 
+QPushButton:focus {{
+    border: 2px solid {ACCENT_CYAN};
+}}
+
 QPushButton#primaryBtn {{
     background-color: {ACCENT_VIOLET};
     border: none;
@@ -206,12 +241,12 @@ QLabel#headerTitle {{
 
 QLabel#headerSubtitle {{
     color: {TEXT_SECONDARY};
-    font-size: 12px;
+    font-size: 13px;
 }}
 
 QLabel#sidebarTitle {{
     color: {TEXT_MUTED};
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 1px;
     padding: 8px 12px 4px 12px;
@@ -225,7 +260,7 @@ QLabel#channelName {{
 
 QLabel#channelCategory {{
     color: {TEXT_MUTED};
-    font-size: 10px;
+    font-size: 13px;
 }}
 
 QSplitter::handle {{
@@ -274,6 +309,11 @@ QTabBar::tab:selected {{
     color: {TEXT_PRIMARY};
 }}
 
+QTabBar::tab:focus {{
+    border: 2px solid {ACCENT_CYAN};
+    color: {TEXT_PRIMARY};
+}}
+
 QComboBox {{
     background-color: {BG_CARD};
     border: 1px solid {BORDER};
@@ -284,6 +324,10 @@ QComboBox {{
 
 QComboBox:hover {{
     border: 1px solid {ACCENT_PURPLE};
+}}
+
+QComboBox:focus {{
+    border: 2px solid {ACCENT_CYAN};
 }}
 
 QComboBox QAbstractItemView {{
@@ -318,7 +362,7 @@ QProgressBar {{
     border-radius: 6px;
     text-align: center;
     color: {TEXT_SECONDARY};
-    font-size: 11px;
+    font-size: 13px;
     height: 18px;
 }}
 

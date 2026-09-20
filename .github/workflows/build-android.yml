@@ -1,8 +1,9 @@
 name: Build Android TV APK
 
+# Der Android-Bauplan scheitert derzeit und lief bei jeder Veroeffentlichung mit.
+# Rote Kreuze auf der Veroeffentlichungsseite schrecken Besucher ab, deshalb
+# laeuft er nur noch auf Zuruf, bis er repariert ist.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 jobs:

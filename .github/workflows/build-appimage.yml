@@ -1,0 +1,76 @@
+name: Linux-AppImage bauen
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Systempakete
+        run: |
+          sudo apt-get update -qq
+          # Die Qt-Plattformschicht xcb braucht diese Bibliotheken. Ohne sie
+          # bricht die Anwendung mit "Could not load the Qt platform plugin xcb"
+          # ab. Sie werden hier gebraucht und vom Baurezept ins AppImage gelegt.
+          sudo apt-get install -y --no-install-recommends \
+            libxcb1 libxcb-util1 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 \
+            libxcb-xkb1 libxcb-glx0 libxcb-dri2-0 libxcb-dri3-0 libxcb-present0 \
+            libxkbcommon0 libxkbcommon-x11-0 libxau6 libxdmcp6 \
+            libegl1 libgl1 libvlc-dev vlc-plugin-base fuse xvfb
+
+      - name: Abhaengigkeiten
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Version bestimmen
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "wert=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "wert=0.0.0-test" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: AppImage bauen
+        run: bash build/linux/build-appimage.sh ${{ steps.version.outputs.wert }}
+
+      - name: Startprobe ohne Bildschirm
+        run: |
+          DATEI=$(ls dist/*.AppImage)
+          chmod +x "$DATEI"
+          "$DATEI" --appimage-extract >/dev/null
+          xvfb-run -a ./squashfs-root/AppRun &
+          PID=$!
+          sleep 30
+          if kill -0 $PID 2>/dev/null; then
+            echo "Startprobe bestanden: die Anwendung laeuft"
+            kill $PID 2>/dev/null || true
+          else
+            echo "Startprobe gescheitert: die Anwendung lief nicht"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SMarTrPlay-Linux-AppImage
+          path: dist/*.AppImage
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/*.AppImage

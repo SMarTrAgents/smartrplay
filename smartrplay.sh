@@ -2,11 +2,17 @@
 # SMarTrPlay IPTV Player - Launch Script
 # SMarTrAgents
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/src"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+PROJEKT="$SCRIPT_DIR"
+cd "$PROJEKT/src"
 
 # Use system Python (PyQt5 is installed for system Python)
-PYTHON=/usr/bin/python3
+PYTHON="$PROJEKT/.venv/bin/python"
+# Die Projektumgebung traegt python-vlc. Ohne sie faellt der Player auf ffplay zurueck.
+if [ ! -x "$PYTHON" ]; then
+    echo "WARNUNG: .venv fehlt, nutze System-Python ohne VLC-Anbindung"
+    PYTHON=/usr/bin/python3
+fi
 
 # Wayland support (spacemen runs Wayland)
 export QT_QPA_PLATFORM=xcb
@@ -23,4 +29,15 @@ if ! command -v ffplay &> /dev/null; then
     echo "Installieren mit: sudo apt install ffmpeg"
 fi
 
-exec $PYTHON main.py "$@"
+# Start as systemd user service (survives terminal disconnects)
+systemctl --user stop smartrplay 2>/dev/null
+systemctl --user reset-failed smartrplay 2>/dev/null
+systemd-run --user --unit=smartrplay \
+  -p LimitNOFILE=65536 \
+  --working-directory="$PROJEKT/src" \
+  --setenv=QT_QPA_PLATFORM=xcb \
+  --setenv=DISPLAY=${DISPLAY:-:0} \
+  $PYTHON main.py "$@"
+echo "SMarTrPlay als systemd-Service gestartet."
+echo "Status: systemctl --user status smartrplay"
+echo "Stop:   systemctl --user stop smartrplay"

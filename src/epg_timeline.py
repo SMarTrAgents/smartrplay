@@ -9,7 +9,7 @@ SMarTr Brand Design: #0A0F1E / #1bf1fb / #8D7CF6
 from datetime import datetime, timedelta
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QPushButton,
-    QLabel, QDialog, QGridLayout, QFrame, QSizePolicy
+    QLabel, QDialog, QGridLayout, QFrame, QSizePolicy, QApplication
 )
 from PyQt5.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal, QTimer
 from PyQt5.QtGui import (
@@ -28,6 +28,12 @@ TEXT_WHITE = "#FFFFFF"
 TEXT_DIM = "#8B8FA3"
 GRID_COLOR = "#1E2640"
 
+# Schriftgrößen für die Timeline-Zeichnung in Punkten.
+# Sie ersetzen die früher fest verdrahteten QFont-Aufrufe und skalieren
+# zusammen mit der Anwendungsschrift (theme.setze_schriftgroesse).
+SCHRIFT_PROGRAMM = 11
+SCHRIFT_ZEITLEISTE = 10
+
 # Program block colors (rotated by index)
 PROG_COLORS = [
     QColor("#1a4a5e"),
@@ -42,8 +48,6 @@ SMARTR_QSS = f"""
 QWidget {{
     background-color: {BG_DARK};
     color: {TEXT_WHITE};
-    font-family: 'Segoe UI', 'Arial', sans-serif;
-    font-size: 12px;
 }}
 QPushButton {{
     background-color: #1A2040;
@@ -70,6 +74,18 @@ QDialog {{
     background-color: {BG_DARK};
 }}
 """
+
+
+def _app_schrift(punkt_groesse):
+    """Schrift der Anwendung in der gewünschten Punktgröße zurückgeben.
+
+    Ohne laufende QApplication fällt der Aufruf auf die Systemstandardschrift
+    zurück; eine feste Schriftfamilie wie 'Segoe UI' wird nicht mehr verdrahtet.
+    """
+    app = QApplication.instance()
+    font = QFont(app.font()) if app is not None else QFont()
+    font.setPointSize(punkt_groesse)
+    return font
 
 
 class ProgramDetailDialog(QDialog):
@@ -125,14 +141,13 @@ class EpgTimelineWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(SMARTR_QSS)
-        self.setMinimumHeight(400)
+        # Höhe bestimmt sich über sizeHint(); vertikal scrollt der umgebende
+        # EpgScrollArea-Bereich, deshalb entfällt die frühere feste Mindesthöhe.
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self._channels = []       # [{"name": "RTL", "id": "rtl"}, ...]
         self._epg_data = {}       # {channel_id: [{start_dt, end_dt, title, ...}, ...]}
         self._program_rects = []  # [(QRect, program_dict), ...]
-        self._scroll_x = 0
-        self._scroll_y = 0
         self._view_start = datetime.now().replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
         self._hours_visible = 6
         self._now_timer = QTimer(self)
@@ -200,6 +215,16 @@ class EpgTimelineWidget(QWidget):
     def _total_height(self):
         return self.HEADER_HEIGHT + len(self._channels) * self.ROW_HEIGHT
 
+    # ─── Größen für den umgebenden Scrollbereich ───
+
+    def sizeHint(self):
+        """Benötigte Gesamtgröße, damit der umgebende Scrollbereich Balken anzeigen kann."""
+        return QSize(self._total_width(), self._total_height())
+
+    def minimumSizeHint(self):
+        """Mindestgröße entspricht der vollen Timeline-Breite und -höhe."""
+        return QSize(self._total_width(), self._total_height())
+
     def _time_to_x(self, dt):
         """Konvertiert datetime → X-Pixel im Content-Bereich."""
         delta = (dt - self._view_start).total_seconds() / 3600.0
@@ -252,7 +277,7 @@ class EpgTimelineWidget(QWidget):
         # Kanal-Namen-Spalte Header
         painter.fillRect(0, 0, self.CHANNEL_NAME_WIDTH, self.HEADER_HEIGHT, QColor(BG_PANEL))
         painter.setPen(QColor(TEXT_DIM))
-        font = QFont("Segoe UI", 9)
+        font = _app_schrift(SCHRIFT_ZEITLEISTE)
         painter.setFont(font)
         painter.drawText(QRect(4, 0, self.CHANNEL_NAME_WIDTH - 8, self.HEADER_HEIGHT),
                          Qt.AlignVCenter | Qt.AlignLeft, "Kanal")
@@ -290,7 +315,7 @@ class EpgTimelineWidget(QWidget):
         painter.drawLine(self.CHANNEL_NAME_WIDTH, y, self.CHANNEL_NAME_WIDTH, y + self.ROW_HEIGHT)
 
         painter.setPen(QColor(TEXT_WHITE))
-        font = QFont("Segoe UI", 10)
+        font = _app_schrift(SCHRIFT_ZEITLEISTE)
         font.setBold(True)
         painter.setFont(font)
         fm = QFontMetrics(font)
@@ -337,7 +362,7 @@ class EpgTimelineWidget(QWidget):
 
             # Programm-Titel
             painter.setPen(QColor(TEXT_WHITE))
-            font = QFont("Segoe UI", 9)
+            font = _app_schrift(SCHRIFT_PROGRAMM)
             painter.setFont(font)
             fm = QFontMetrics(font)
             title = prog.get("title", "")
@@ -349,7 +374,7 @@ class EpgTimelineWidget(QWidget):
             if block_w > 100:
                 time_str = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
                 painter.setPen(QColor(TEXT_DIM))
-                font_small = QFont("Segoe UI", 7)
+                font_small = _app_schrift(SCHRIFT_ZEITLEISTE)
                 painter.setFont(font_small)
                 painter.drawText(block_rect.adjusted(6, block_rect.height() - 18, -4, -2),
                                  Qt.AlignBottom | Qt.AlignLeft, time_str)
@@ -395,7 +420,7 @@ class EpgTimelineWidget(QWidget):
 
         # Jetzt-Label
         painter.setPen(QColor(ACCENT_CYAN))
-        font = QFont("Segoe UI", 8)
+        font = _app_schrift(SCHRIFT_ZEITLEISTE)
         font.setBold(True)
         painter.setFont(font)
         painter.drawText(QRect(x + 6, self.HEADER_HEIGHT + 4, 60, 20),
@@ -408,14 +433,18 @@ class EpgTimelineWidget(QWidget):
     # ─── Mouse / Scroll ───
 
     def wheelEvent(self, event):
-        """Horizontal scrollen mit Shift, vertikal normal."""
+        """Mit Shift horizontal in der Zeit scrollen.
+
+        Ohne Shift wird das Rad an den übergeordneten EpgScrollArea-Bereich
+        weitergegeben; der frühere eigene _scroll_y-Weg war toter Code und ist
+        entfernt, weil der Scrollbereich das vertikale Scrollen übernimmt.
+        """
         if event.modifiers() & Qt.ShiftModifier:
             delta = event.angleDelta().y() / 120
             self.scroll_hours(-delta)
+            event.accept()
         else:
-            self._scroll_y += event.angleDelta().y()
-            self.update()
-        event.accept()
+            event.ignore()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -448,6 +477,8 @@ class EpgScrollArea(QScrollArea):
         super().__init__(parent)
         self.timeline = timeline_widget
         self.setWidget(timeline_widget)
+        # WidgetResizable: die Timeline nutzt sizeHint(); bei Übergröße
+        # erscheinen beide Balken von selbst (Policy AsNeeded ist gesetzt).
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -465,10 +496,17 @@ class EpgContainer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # Timeline zuerst erzeugen: die Toolbar-Knoepfe verweisen direkt darauf.
+        # Frueher wurde erst die Toolbar verbunden, was EpgContainer beim
+        # Konstruieren mit einem AttributeError abbrechen liess.
+        self.timeline = EpgTimelineWidget()
+        self.scroll_area = EpgScrollArea(self.timeline, self)
+
         # Toolbar
         toolbar = QWidget()
         toolbar.setStyleSheet(f"background-color: {BG_PANEL};")
-        toolbar.setFixedHeight(36)
+        # Mindesthöhe 48: Platz für die 40 Pixel hohen Bedienknöpfe samt Ränder
+        toolbar.setFixedHeight(48)
         tb_layout = QHBoxLayout(toolbar)
         tb_layout.setContentsMargins(8, 4, 8, 4)
         tb_layout.setSpacing(6)
@@ -479,28 +517,27 @@ class EpgContainer(QWidget):
         tb_layout.addStretch()
 
         self.btn_prev = QPushButton("◀")
-        self.btn_prev.setFixedSize(30, 28)
+        # Bedienflächen für gute Erreichbarkeit: mindestens 44 breit und 40 hoch
+        self.btn_prev.setMinimumSize(44, 40)
         self.btn_prev.setToolTip("Eine Stunde zurück")
         self.btn_prev.clicked.connect(lambda: self.timeline.scroll_hours(-1))
         tb_layout.addWidget(self.btn_prev)
 
         self.btn_now = QPushButton("Jetzt")
-        self.btn_now.setFixedHeight(28)
+        self.btn_now.setMinimumSize(44, 40)
         self.btn_now.setToolTip("Zur aktuellen Zeit springen")
         self.btn_now.clicked.connect(self.timeline.scroll_to_now)
         tb_layout.addWidget(self.btn_now)
 
         self.btn_next = QPushButton("▶")
-        self.btn_next.setFixedSize(30, 28)
+        self.btn_next.setMinimumSize(44, 40)
         self.btn_next.setToolTip("Eine Stunde vor")
         self.btn_next.clicked.connect(lambda: self.timeline.scroll_hours(1))
         tb_layout.addWidget(self.btn_next)
 
         layout.addWidget(toolbar)
 
-        # Timeline
-        self.timeline = EpgTimelineWidget()
-        self.scroll_area = EpgScrollArea(self.timeline, self)
+        # Timeline samt Scrollbereich
         layout.addWidget(self.scroll_area, 1)
 
     def set_channels(self, channels):

@@ -2,6 +2,7 @@
 """SMarTrPlay - VOD Browser (Movies) mit Covers, Ratings und Beschreibungen."""
 
 import os
+import time
 import hashlib
 import urllib.request
 import subprocess
@@ -12,14 +13,19 @@ from PyQt5.QtWidgets import (
     QLineEdit, QLabel, QPushButton, QWidget, QProgressBar, QTextEdit,
 )
 from PyQt5.QtCore import (
-    Qt, QThread, pyqtSignal, QSize, QMutex,
+    Qt, QThread, pyqtSignal, QSize, QMutex, QTimer,
 )
 from PyQt5.QtGui import (
     QPixmap,
 )
 
+# Obergrenze der angezeigten Suchtreffer. Bei 38478 Filmen wuerde eine
+# ungedeckelte Trefferliste die Oberflaeche minutenlang blockieren.
+MAX_TREFFER_SUCHE = 500
+
 from xtream_api import XtreamAPI
 from player import PlayerBackend
+import fadenpark
 
 # SMarTr Brand Colors
 COLOR_BG = "#0A0F1E"
@@ -162,7 +168,11 @@ def cover_cache_path(url):
 
 
 def download_cover(url, target_path):
-    """Cover-Bild herunterladen und lokal cachen. Gibt Pfad oder None zurueck."""
+    """Cover-Bild herunterladen und lokal cachen. Gibt Pfad oder None zurueck.
+
+    Nur aus Hintergrundfaeden rufen: Der Abruf kann bis zum Zeitlimit von
+    8 Sekunden dauern und darf den Bedienfaden nie blockieren.
+    """
     if not url or not target_path:
         return None
     if os.path.exists(target_path):
@@ -171,7 +181,7 @@ def download_cover(url, target_path):
         req = urllib.request.Request(url, headers={
             "User-Agent": "SMarTrPlay/1.0"
         })
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp:
             data = resp.read()
         with open(target_path, "wb") as f:
             f.write(data)
@@ -190,6 +200,23 @@ def rating_to_stars(rating, max_stars=5):
     filled = max(0, min(max_stars, filled))
     return "\u2605" * filled + "\u2606" * (max_stars - filled)
 
+
+# ----------------------------------------------------------------------
+# Thread-Entsorgung
+# ----------------------------------------------------------------------
+
+def thread_sicher_entsorgen(thread, ablage, wartezeit_ms=3000, name=""):
+    """QThread sicher entsorgen. Leitet auf den zentralen Fadenpark weiter.
+
+    Die frueher hier eingebaute Fassung hat einen noch laufenden Faden zwar in
+    eine Liste gehaengt, ihn aber NICHT von seinem Elternfenster geloest. Da
+    die Ladefaeden mit dem Fenster als Qt-Elternobjekt erzeugt werden, hat Qt
+    sie beim Loeschen des Fensters trotzdem mitgerissen. Gemessen am
+    19.09.2026 beim Providerwechsel waehrend eines laufenden Serienabrufs.
+    Der Fadenpark nabelt den Faden ab und haelt ihn modulweit fest.
+    Der Parameter ablage bleibt aus Vertraeglichkeitsgruenden erhalten.
+    """
+    fadenpark.entsorge_faden(thread, wartezeit_ms=wartezeit_ms, name=name)
 
 class VodLoaderThread(QThread):
     """Laedt VOD Streams im Hintergrund."""
@@ -292,6 +319,28 @@ class CoverLoaderThread(QThread):
         self._mutex.unlock()
 
 
+class VodInfoCoverThread(QThread):
+    """Laedt ein einzelnes Cover fuer den Filmdialog im Hintergrund.
+
+    Frueher lief dieser Abruf mit einem Zeitlimit von 10 Sekunden blockierend
+    im Bedienfaden, jedes Mal wenn ein Filmdialog geoeffnet wurde. Das fertige
+    Bild liegt jetzt als Signal vor; bis dahin zeigt das Label einen
+    Platzhaltertext.
+    """
+
+    cover_fertig = pyqtSignal(QPixmap)
+
+    def __init__(self, url, target_path, parent=None):
+        super().__init__(parent)
+        self._url = url
+        self._target_path = target_path
+
+    def run(self):
+        path = download_cover(self._url, self._target_path)
+        pix = QPixmap(path) if path else QPixmap()
+        self.cover_fertig.emit(pix)
+
+
 class VodListItemWidget(QWidget):
     """Custom Widget fuer einen VOD-Eintrag mit Cover, Name und Rating."""
 
@@ -357,6 +406,8 @@ class VodInfoDialog(QDialog):
         self.player = player
         self.info_data = None
         self.info_thread = None
+        self.cover_thread = None
+        self._zombie_threads = []      # noch laufende Faeden, die spaeter aufgeraeumt werden
         self._init_ui()
         self._load_info()
 
@@ -466,23 +517,52 @@ class VodInfoDialog(QDialog):
         self._load_cover()
 
     def _load_cover(self):
-        """Cover-Bild laden (stream_icon, bei Info-Load durch cover_big ergaenzen)."""
+        """Cover im Hintergrund laden (stream_icon, durch cover_big ergaenzen).
+
+        Solange kein Bild da ist, zeigt das Label einen Platzhaltertext; der
+        Bedienfaden bleibt dabei frei.
+        """
         icon_url = self.stream_data.get("stream_icon", "")
-        if icon_url:
-            path = cover_cache_path(icon_url)
-            if path:
-                if not os.path.exists(path):
-                    download_cover(icon_url, path)
-                if os.path.exists(path):
-                    pix = QPixmap(path)
-                    if not pix.isNull():
-                        scaled = pix.scaled(
-                            COVER_FULL_W, COVER_FULL_H,
-                            Qt.KeepAspectRatio, Qt.SmoothTransformation,
-                        )
-                        self.cover_label.setPixmap(scaled)
-                        return
-        self.cover_label.setText("\U0001F3AC Kein Cover")
+        if not icon_url:
+            self.cover_label.setText("\U0001F3AC Kein Cover")
+            return
+        self.cover_label.setText("\U0001F3AC Cover wird geladen...")
+        self._lade_cover_im_hintergrund(icon_url)
+
+    def _lade_cover_im_hintergrund(self, url):
+        """Cover-Abruf in einen Hintergrundfaden verlagern.
+
+        Laeuft noch eine Cover-Anfrage, wird sie vorher sicher entsorgt,
+        damit nicht zwei Faeden dasselbe Label beschreiben.
+        """
+        if not url:
+            return
+        path = cover_cache_path(url)
+        if not path:
+            return
+        if self.cover_thread:
+            try:
+                self.cover_thread.cover_fertig.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+        thread_sicher_entsorgen(
+            self.cover_thread, self._zombie_threads,
+            name="VodInfoCoverThread",
+        )
+        self.cover_thread = VodInfoCoverThread(url, path)
+        self.cover_thread.cover_fertig.connect(self._on_cover_geladen)
+        self.cover_thread.start()
+
+    def _on_cover_geladen(self, pixmap):
+        """Fertiges Cover aus dem Hintergrundfaden empfangen und anzeigen."""
+        if pixmap and not pixmap.isNull():
+            scaled = pixmap.scaled(
+                COVER_FULL_W, COVER_FULL_H,
+                Qt.KeepAspectRatio, Qt.SmoothTransformation,
+            )
+            self.cover_label.setPixmap(scaled)
+        else:
+            self.cover_label.setText("\U0001F3AC Kein Cover")
 
     def _load_info(self):
         """VOD Info im Hintergrund laden."""
@@ -499,21 +579,10 @@ class VodInfoDialog(QDialog):
         self.info_data = info
         info_dict = info.get("info", {})
 
-        # Cover durch cover_big aktualisieren falls verfuegbar
+        # Cover durch cover_big aktualisieren falls verfuegbar (im Hintergrund)
         cover_big = info_dict.get("cover_big", "")
         if cover_big:
-            path = cover_cache_path(cover_big)
-            if path:
-                if not os.path.exists(path):
-                    download_cover(cover_big, path)
-                if os.path.exists(path):
-                    pix = QPixmap(path)
-                    if not pix.isNull():
-                        scaled = pix.scaled(
-                            COVER_FULL_W, COVER_FULL_H,
-                            Qt.KeepAspectRatio, Qt.SmoothTransformation,
-                        )
-                        self.cover_label.setPixmap(scaled)
+            self._lade_cover_im_hintergrund(cover_big)
 
         # Meta info zusammenstellen
         genre = info_dict.get("genre", "") or ""
@@ -587,10 +656,17 @@ class VodInfoDialog(QDialog):
             pass
 
     def closeEvent(self, event):
-        """Cleanup beim Schlie\u00dfen."""
-        if self.info_thread and self.info_thread.isRunning():
-            self.info_thread.quit()
-            self.info_thread.wait(3000)
+        """Cleanup beim Schliessen: Hintergrundfaeden sicher entsorgen."""
+        thread_sicher_entsorgen(
+            self.cover_thread, self._zombie_threads,
+            name="VodInfoCoverThread",
+        )
+        thread_sicher_entsorgen(
+            self.info_thread, self._zombie_threads,
+            name="VodInfoLoaderThread",
+        )
+        self.cover_thread = None
+        self.info_thread = None
         super().closeEvent(event)
 
 
@@ -603,9 +679,16 @@ class VodBrowser(QDialog):
         self.player = player or PlayerBackend()
         self.categories = []
         self.current_streams = []
+        # Mastersuche: der gesamte Filmbestand, einmal geholt und behalten.
+        # Ohne ihn wuerde die Suche nur die gerade gewaehlte Kategorie treffen.
+        self._gesamtbestand = None
+        self._suche_laeuft = False
+        self._suche_offen = None
         self.loader_thread = None
         self.cover_thread = None
         self._item_widgets = {}
+        self._zombie_threads = []       # noch laufende Faeden, die spaeter aufgeraeumt werden
+        self._letzte_aktivierung = 0.0  # Zeitschutz gegen doppelte Aktivierung
 
         self._init_ui()
         self._load_categories()
@@ -653,6 +736,9 @@ class VodBrowser(QDialog):
         self.movie_list.setSpacing(2)
         self.movie_list.setResizeMode(QListWidget.Adjust)
         self.movie_list.itemDoubleClicked.connect(self._on_movie_double_click)
+        # Zusaetzlich itemActivated verbinden, damit die Eingabetaste
+        # dieselbe Aktion ausloest (Tastaturbedienung).
+        self.movie_list.itemActivated.connect(self._on_movie_double_click)
         splitter.addWidget(self.movie_list)
 
         splitter.setStretchFactor(0, 0)
@@ -709,10 +795,20 @@ class VodBrowser(QDialog):
         self.movie_list.clear()
         self._item_widgets.clear()
 
-        # Vorherigen Loader stoppen
-        if self.loader_thread and self.loader_thread.isRunning():
-            self.loader_thread.quit()
-            self.loader_thread.wait(3000)
+        # Vorherigen Loader stoppen und Signale trennen; ohne Auswertung des
+        # wait-Ergebnisses war deleteLater hier die Absturzursache beim
+        # schnellen Kategoriewechsel.
+        if self.loader_thread:
+            try:
+                self.loader_thread.finished.disconnect()
+                self.loader_thread.error.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            thread_sicher_entsorgen(
+                self.loader_thread, self._zombie_threads,
+                name="VodLoaderThread",
+            )
+            self.loader_thread = None
 
         self.loader_thread = VodLoaderThread(self)
         self.loader_thread.finished.connect(self._on_streams_loaded)
@@ -769,29 +865,129 @@ class VodBrowser(QDialog):
                 break
 
     def _on_search(self, text):
-        """Filme nach Suchbegriff filtern."""
-        text = text.lower().strip()
-        for i in range(self.movie_list.count()):
-            item = self.movie_list.item(i)
-            stream = item.data(Qt.UserRole)
-            name = stream.get("name", "").lower()
-            item.setHidden(bool(text) and text not in name)
+        """Suche ueber ALLE Kategorien, nicht nur ueber die gewaehlte.
+
+        Ab zwei Zeichen wird der gesamte Filmbestand durchsucht. Er wird
+        einmal je Sitzung geholt und danach behalten, weil ein erneuter
+        Abruf den Anbieter unnoetig belastet. Bei leerem Feld kehrt die
+        Ansicht zur gewaehlten Kategorie zurueck.
+        """
+        text = (text or "").strip()
+        if not hasattr(self, "_such_timer"):
+            self._such_timer = QTimer(self)
+            self._such_timer.setSingleShot(True)
+            self._such_timer.timeout.connect(self._suche_ausfuehren)
+        self._suche_offen = text
+        if len(text) < 2:
+            self._such_timer.stop()
+            self._zurueck_zur_kategorie()
+            return
+        # Entprellung: erst tippen lassen, dann suchen
+        self._such_timer.start(350)
+
+    def _zurueck_zur_kategorie(self):
+        """Zeigt wieder die Filme der gewaehlten Kategorie.
+
+        Waehrend einer Suche ersetzt die Trefferliste den Listeninhalt. Der
+        Inhalt der gewaehlten Kategorie wird deshalb vorher beiseitegelegt und
+        hier wiederhergestellt, sonst bliebe nach dem Leeren des Suchfelds die
+        Trefferliste stehen.
+        """
+        beiseite = getattr(self, "_kategorie_streams", None)
+        if beiseite is None:
+            for i in range(self.movie_list.count()):
+                self.movie_list.item(i).setHidden(False)
+            return
+        self.movie_list.clear()
+        self._item_widgets.clear()
+        self._kategorie_streams = None
+        self._on_streams_loaded(beiseite)
+
+    def _suche_ausfuehren(self):
+        text = (self._suche_offen or "").strip()
+        if len(text) < 2:
+            return
+        if self._gesamtbestand is not None:
+            self._treffer_zeigen(text)
+            return
+        if self._suche_laeuft:
+            return
+        self._suche_laeuft = True
+        self.status_label.setText("Suche ueber alle Kategorien, hole den Bestand...")
+        self.progress.setVisible(True)
+        self._bestand_thread = VodLoaderThread(self)
+        self._bestand_thread.finished.connect(self._bestand_da)
+        self._bestand_thread.error.connect(self._bestand_fehler)
+        self._bestand_thread.start(self.api, None)
+
+    def _bestand_da(self, streams):
+        self._suche_laeuft = False
+        self.progress.setVisible(False)
+        self._gesamtbestand = streams or []
+        self._treffer_zeigen((self._suche_offen or "").strip())
+
+    def _bestand_fehler(self, fehler):
+        self._suche_laeuft = False
+        self.progress.setVisible(False)
+        self.status_label.setText(f"Suche nicht moeglich: {fehler}")
+
+    def _treffer_zeigen(self, text):
+        """Zeigt die Treffer aus dem Gesamtbestand in der Liste."""
+        klein = text.lower()
+        treffer = [st for st in (self._gesamtbestand or [])
+                   if klein in (st.get("name", "") or "").lower()]
+        gefunden = len(treffer)
+        if gefunden > MAX_TREFFER_SUCHE:
+            treffer = treffer[:MAX_TREFFER_SUCHE]
+        if getattr(self, "_kategorie_streams", None) is None:
+            # Erster Suchlauf: den Inhalt der Kategorie beiseitelegen
+            self._kategorie_streams = list(self.current_streams or [])
+        self.movie_list.clear()
+        self._item_widgets.clear()
+        self._on_streams_loaded(treffer)
+        if gefunden == 0:
+            self.status_label.setText(f"Nichts gefunden zu \"{text}\" in allen Kategorien")
+        elif gefunden > len(treffer):
+            self.status_label.setText(
+                f"{gefunden} Treffer in allen Kategorien, die ersten {len(treffer)} werden gezeigt")
+        else:
+            self.status_label.setText(f"{gefunden} Treffer in allen Kategorien")
+
+    def _aktion_freigeben(self):
+        """Zeitschutz gegen doppelte Aktivierung.
+
+        Ein Doppelklick loest itemDoubleClicked und itemActivated praktisch
+        gleichzeitig aus; ohne diesen Schutz wuerde der Filmdialog zweimal
+        geoeffnet. Die Eingabetaste nutzt denselben Schutz.
+        """
+        jetzt = time.monotonic()
+        if jetzt - self._letzte_aktivierung < 0.3:
+            return False
+        self._letzte_aktivierung = jetzt
+        return True
 
     def _on_movie_double_click(self, item):
-        """Film-Details in VodInfoDialog anzeigen."""
+        """Film-Details in VodInfoDialog anzeigen (Doppelklick oder Eingabetaste)."""
+        if not self._aktion_freigeben():
+            return
         stream = item.data(Qt.UserRole)
         dialog = VodInfoDialog(stream, self.api, self.player, self)
         dialog.exec_()
 
     def closeEvent(self, event):
-        """Cleanup beim Schlie\u00dfen."""
+        """Cleanup beim Schliessen: Hintergrundfaeden sicher entsorgen."""
         if self.cover_thread:
             self.cover_thread.stop()
-            self.cover_thread.quit()
-            self.cover_thread.wait(3000)
-        if self.loader_thread and self.loader_thread.isRunning():
-            self.loader_thread.quit()
-            self.loader_thread.wait(3000)
+        thread_sicher_entsorgen(
+            self.cover_thread, self._zombie_threads,
+            name="CoverLoaderThread",
+        )
+        thread_sicher_entsorgen(
+            self.loader_thread, self._zombie_threads,
+            name="VodLoaderThread",
+        )
+        self.cover_thread = None
+        self.loader_thread = None
         super().closeEvent(event)
 
 

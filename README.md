@@ -1,254 +1,219 @@
-# 📺 SMarTrPlay — Modern IPTV Player
+<div align="center">
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Python 3](https://img.shields.io/badge/Python-3.x-yellow.svg)
-![PyQt5](https://img.shields.io/badge/GUI-PyQt5-green.svg)
-![Linux](https://img.shields.io/badge/Platform-Linux-FCC624.svg?logo=linux&logoColor=black)
-![Windows](https://img.shields.io/badge/Platform-Windows-0078D6.svg?logo=windows&logoColor=white)
+# 📺 SMarTrPlay — Free Open Source IPTV Player for Windows & Linux
 
-> A modern, feature-rich IPTV player built with Python, PyQt5, and ffplay — featuring Xtream Codes API support, EPG, VOD, Series browsing, DLNA casting, and much more.
+**Xtream Codes · M3U / M3U8 · EPG TV Guide · VOD & Series · VLC Playback · Fullscreen Zapping**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Windows Installer](https://img.shields.io/badge/Windows-Installer-0078D6.svg?logo=windows&logoColor=white)](https://github.com/SMarTrAgents/smartrplay/releases/latest)
+[![Linux AppImage](https://img.shields.io/badge/Linux-AppImage-FCC624.svg?logo=linux&logoColor=black)](https://github.com/SMarTrAgents/smartrplay/releases/latest)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-yellow.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![PyQt5](https://img.shields.io/badge/GUI-PyQt5-41CD52.svg?logo=qt&logoColor=white)](https://pypi.org/project/PyQt5/)
+[![Built by SMarTrAgents](https://img.shields.io/badge/built%20by-smartragents.ai-00B4D8.svg)](https://smartragents.ai)
+
+### [⬇️ Download for Windows](https://github.com/SMarTrAgents/smartrplay/releases/latest) · [⬇️ Download for Linux](https://github.com/SMarTrAgents/smartrplay/releases/latest) · [🌐 smartragents.ai](https://smartragents.ai)
+
+</div>
+
+---
+
+> **SMarTrPlay is a free, open source IPTV player** for Windows and Linux. Connect your own
+> Xtream Codes account or M3U playlist and watch live TV, movies and series with a real
+> program guide — built on **libVLC**, so hardware acceleration, subtitles and audio tracks
+> just work. One installer for Windows, one single AppImage file for Linux. No account with
+> us, no telemetry, no ads inside the player.
+
+> **SMarTrPlay ist ein kostenloser IPTV-Player mit offenem Quelltext** für Windows und Linux.
+> Eigenen Xtream-Codes-Zugang oder M3U-Liste eintragen und Fernsehen, Filme und Serien mit
+> echter Programmzeitschrift schauen. Ein Installer für Windows, eine einzige AppImage-Datei
+> für Linux. Kein Konto bei uns, keine Datensammlung, keine Werbung im Player.
+
+---
+
+## 📥 Download
+
+| Platform | File | Notes |
+|---|---|---|
+| **Windows 10 / 11** | [`SMarTrPlay-Setup-x.y.z.exe`](https://github.com/SMarTrAgents/smartrplay/releases/latest) | Installs per user, no admin rights required. Needs [VLC](https://www.videolan.org/vlc/) for playback — the installer offers the download. |
+| **Linux (x86_64)** | [`SMarTrPlay-x.y.z-x86_64.AppImage`](https://github.com/SMarTrAgents/smartrplay/releases/latest) | One file, no installation. `chmod +x` and run. Uses your system VLC. |
+| **From source** | see [Build from source](#-build-from-source) | Python 3.11+, PyQt5, python-vlc |
+
+```bash
+# Linux — three commands and you are watching
+wget https://github.com/SMarTrAgents/smartrplay/releases/latest/download/SMarTrPlay-x86_64.AppImage
+chmod +x SMarTrPlay-x86_64.AppImage
+./SMarTrPlay-x86_64.AppImage
+```
+
+---
+
+## ✨ What SMarTrPlay does
+
+### Live TV, movies and series
+- **Xtream Codes API** — enter server, username and password, everything loads automatically
+- **M3U / M3U8 playlists** — local files and remote URLs
+- **EPG program guide** — XMLTV timeline with what is on now and next
+- **Movies (VOD)** with cover art, plot, rating and trailer
+- **Series** with seasons and episodes, and **episode zapping in fullscreen**
+- **Multiple providers** side by side, switch without restarting
+
+### Built for actually watching
+- **libVLC playback** — hardware acceleration, subtitles, multiple audio tracks
+- **Fullscreen with a real control bar** — double-click the picture to enter and leave,
+  the stream keeps running, no restart, no black frame
+- **Zapping without leaving fullscreen** — arrow keys switch channel or episode,
+  `L` opens a searchable channel list on top of the running picture
+- **Master search across every category** — including the ones your provider does not even
+  list. On a real account this reached 22 037 series that were unreachable before.
+- **Keyboard first** — `F11` fullscreen, `Space` pause, `←` `→` seek, `↑` `↓` zap, `M` mute
+- **Large fonts and visible scrollbars** — built with low vision in mind, not as an afterthought
+
+### Quiet where it matters
+- **Diagnostics server bound to localhost only**, with a token — never exposed to the network
+- **No telemetry**, no account, no phone home
+- **SQLite with WAL** for a fast local cache of your own lists
 
 ---
 
 ## 📸 Screenshots
 
-| Live TV | VOD Browser | EPG Timeline |
+| Live TV | Movies (VOD) | Series |
 |---|---|---|
-| ![Live TV](docs/screenshots/live-tv.png) | ![VOD Browser](docs/screenshots/vod-browser.png) | ![EPG Timeline](docs/screenshots/epg-timeline.png) |
+| ![Live TV channel list with categories](docs/screenshots/live-tv.png) | ![Movie browser with cover art](docs/screenshots/vod-browser.png) | ![Series browser with seasons and episodes](docs/screenshots/series.png) |
 
-| Series Browser | Mini Player | Web Remote |
+**Fullscreen with the floating control bar** — large buttons, seek bar, channel and episode zapping:
+
+![SMarTrPlay fullscreen IPTV player with control bar](docs/screenshots/fullscreen-controls.png)
+
+**Zapping without leaving fullscreen** — the channel list floats over the running picture:
+
+![Zapping list over the running picture in fullscreen](docs/screenshots/zapping-list.png)
+
+**Master search across every category** — 7 527 hits in one go, including categories the
+provider does not even list:
+
+![Master search across all categories in the IPTV player](docs/screenshots/search.png)
+
+> **About these screenshots:** the picture on screen is our own demo image, not a film,
+> and every provider, category and channel name is deliberately unreadable. SMarTrPlay is
+> shipped and documented without any third party content.
+>
+> **Zu den Bildern:** Das Bild auf dem Schirm ist unsere eigene Vorlage, kein Film, und
+> Anbieter-, Kategorie- und Sendernamen sind bewusst unlesbar gemacht. SMarTrPlay wird ohne
+> fremde Inhalte ausgeliefert und gezeigt.
+
+---
+
+## 🚀 Quick start
+
+1. Download and start SMarTrPlay.
+2. Open **Settings → Providers → Add**.
+3. Enter the server address, username and password **of your own IPTV subscription**, or
+   pick an M3U file.
+4. The channel, movie and series lists load by themselves. Double-click a channel to watch.
+5. Double-click the picture for fullscreen. Arrow keys zap. `L` opens the channel list.
+
+> **You bring your own service.** SMarTrPlay ships no channels, no playlists and no
+> credentials. It is a player, like VLC is a player. Use it with a subscription you are
+> entitled to use.
+>
+> **Du bringst deinen eigenen Dienst mit.** SMarTrPlay liefert keine Sender, keine Listen und
+> keine Zugangsdaten mit. Es ist ein Abspielprogramm, so wie VLC eines ist. Nutze es mit
+> einem Zugang, zu dem du berechtigt bist.
+
+---
+
+## ⌨️ Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `F11` / `F` / double-click | Fullscreen on and off |
+| `Esc` | Leave fullscreen |
+| `Space` | Pause / resume |
+| `←` / `→` | Seek 10 seconds |
+| `↑` / `↓` | Previous / next channel — or episode while a series is playing |
+| `L` | Channel list on top of the running picture |
+| `M` | Mute |
+| `+` / `-` | Volume |
+
+---
+
+## 🔧 Build from source
+
+```bash
+git clone https://github.com/SMarTrAgents/smartrplay.git
+cd smartrplay
+python3 -m venv .venv --system-site-packages
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python src/main.py
+```
+
+**Linux AppImage:**
+```bash
+.venv/bin/pip install pyinstaller
+bash build/linux/build-appimage.sh 5.0.0     # → dist/SMarTrPlay-5.0.0-x86_64.AppImage
+```
+
+**Windows installer:** built by GitHub Actions
+([`build-windows.yml`](.github/workflows/build-windows.yml)) with PyInstaller and Inno Setup.
+Push a tag `vX.Y.Z` and both packages are built, tested and attached to the release.
+
+**Requirements:** Python 3.11+, PyQt5, python-vlc, requests — and VLC installed on the system.
+
+---
+
+## 🧪 Quality
+
+Every change is measured against the running window, not against the source code.
+The acceptance runs live in [`tests/`](tests/):
+
+| Run | Checks | What it proves |
 |---|---|---|
-| ![Series](docs/screenshots/series.png) | ![Mini Player](docs/screenshots/mini-player.png) | ![Web Remote](docs/screenshots/web-remote.png) |
+| `abnahme.py` | 20 | Startup, playback, pause, seek, volume, clean shutdown |
+| `abnahme-vollbild.py` | 19 | Fullscreen, control bar, zapping, return without losing the picture |
+| `abnahme-suche.py` | 14 | Series loading, category coverage, master search |
+| `abnahme-serienzappen.py` | 17 | Episodes in the video area, episode zapping, season limits |
 
 ---
 
-## ✨ Features
+## 🏢 Built by SMarTrAgents
 
-### v1.0.0 — Core Foundation
-- 📺 **Live TV** — Stream live IPTV channels with ffplay backend
-- 📋 **M3U Playlist Support** — Import and parse M3U/M3U8 playlists
-- 🔗 **Xtream Codes API** — Full Xtream Codes panel integration
-- 🎨 **SMarTr Brand Design** — Custom dark blue & cyan themed UI
+SMarTrPlay is built and maintained by **[SMarTrAgents](https://smartragents.ai)** — we build
+AI agents and automation that actually run in production: telephone agents that answer your
+calls, ticket systems, content pipelines and custom agent teams.
 
-### v2.0.0 — Enhanced Experience
-- 📅 **EPG (Electronic Program Guide)** — View program schedules for channels
-- ⚙️ **Settings Panel** — Configure player, streams, and UI preferences
-- 📚 **Series Browser** — Browse and watch series from your provider
-- ⭐ **Favorites** — Mark channels, VOD, and series as favorites for quick access
+**→ [smartragents.ai](https://smartragents.ai)** — see what else we build.
 
-### v3.0.0 — Power User Features
-- 🪟 **Picture-in-Picture (PiP)** — Watch in a floating mini window while browsing
-- 💬 **Subtitles** — Load and display subtitle tracks
-- ⏺️ **Recording** — Record live streams to local storage
-- 🔄 **Auto-Refresh** — Automatically refresh playlists and EPG data
-- 📦 **AppImage** — Portable Linux AppImage builds
-
-### v4.0.0 — Advanced & Cast
-- 📡 **DLNA / Cast** — Cast streams to DLNA-compatible devices (TVs, speakers)
-- 👤 **Multi-Profile** — Manage multiple IPTV providers with seamless switching
-- 🖥️ **Mini Player** — Compact floating player widget
-- 📊 **EPG Timeline** — Visual timeline view of upcoming programs
-- ⏯️ **Catch-up** — Watch previously aired content with catch-up support
-- 🌐 **Web Remote** — Control SMarTrPlay from a browser on your phone or tablet
-- 📦 **Flatpak & Snap** — Additional Linux package formats
-- 🎬 **VOD Browser** — Browse video-on-demand content with metadata, posters, and categories
-- 📖 **Series Browser Enhancement** — Improved series browsing with season/episode navigation
-- 🔍 **Global Search** — Search across live channels, VOD, and series simultaneously
-- 🖱️ **Double-Click Seek** — Double-click on the player to seek forward/backward
-
----
-
-## 🚀 Installation
-
-### Linux
-
-#### Option A: DEB Package (Debian/Ubuntu)
-```bash
-sudo dpkg -i SMarTrPlay_v4.0.0_amd64.deb
-sudo apt-get install -f  # Install dependencies if needed
-```
-
-#### Option B: AppImage
-```bash
-chmod +x SMarTrPlay_v4.0.0_x86_64.AppImage
-./SMarTrPlay_v4.0.0_x86_64.AppImage
-```
-
-#### Option C: Flatpak
-```bash
-flatpak install smartrplay
-flatpak run ai.smartragents.SMarTrPlay
-```
-
-#### Option D: Snap
-```bash
-sudo snap install smartrplay
-smartrplay
-```
-
-### Windows
-
-Download `SMarTrPlay_v4.0.0.exe` from the [Releases](../../releases) page and run the installer.
-
-### From Source
-
-#### Prerequisites
-- Python 3.8+
-- PyQt5
-- ffplay (part of FFmpeg)
-- SQLite3
-
-#### Install
-```bash
-git clone https://github.com/SMartrAgents/SMarTrPlay.git
-cd SMarTrPlay
-pip install -r requirements.txt
-python main.py
-```
-
----
-
-## 📖 Usage
-
-### Adding an IPTV Provider
-1. Open SMarTrPlay
-2. Go to **Settings → Providers → Add Provider**
-3. Choose provider type:
-   - **Xtream Codes**: Enter server URL, username, and password
-   - **M3U URL**: Paste your M3U playlist URL
-   - **Local M3U File**: Browse to a local .m3u file
-4. Click **Save** — channels, VOD, and series will be loaded automatically
-
-### Browsing Live Channels
-1. Navigate to the **Live TV** tab
-2. Browse channels by category or use the search bar
-3. Double-click a channel to start streaming
-4. Use the player controls for volume, fullscreen, and PiP
-
-### Watching VOD (Video on Demand)
-1. Navigate to the **VOD** tab
-2. Browse movies by category or search by title
-3. Click a movie to see details and poster
-4. Press **Play** to start watching
-
-### Watching Series
-1. Navigate to the **Series** tab
-2. Browse series by category or search
-3. Click a series to see seasons and episodes
-4. Select an episode and press **Play**
-
-### Configuration & Settings
-
-Access settings via **Settings → Preferences**:
-
-| Setting | Description |
-|---|---|
-| **Player Backend** | Choose ffplay or external player |
-| **Default Volume** | Set startup volume (0–100) |
-| **EPG Refresh Interval** | Auto-refresh EPG every N hours |
-| **Recording Path** | Directory for recorded streams |
-| **Subtitle Language** | Preferred subtitle language |
-| **Theme** | Dark (SMarTr default) or Light |
-| **PiP Default Size** | Mini player window size |
-| **Cast Device** | Default DLNA device |
-
-### Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Space` | Play / Pause |
-| `F` | Toggle Fullscreen |
-| `P` | Toggle Picture-in-Picture |
-| `M` | Mute / Unmute |
-| `↑` / `↓` | Volume Up / Down |
-| `←` / `→` | Seek -10s / +10s |
-| `R` | Start / Stop Recording |
-| `S` | Toggle Subtitles |
-| `C` | Open Cast / DLNA menu |
-| `Ctrl+F` | Global Search |
-| `Ctrl+D` | Double-click seek (enable/disable) |
-| `Esc` | Exit Fullscreen / Close PiP |
-
----
-
-## 🔧 Build from Source
-
-### Prerequisites
-- Python 3.8+
-- `pyinstaller` (`pip install pyinstaller`)
-- `fpm` (for deb packages: `gem install fpm`)
-- `appimagetool` (for AppImage builds)
-
-### Build DEB
-```bash
-python build.py --target=deb
-# Output: build/linux/build_deb/SMarTrPlay_v4.0.0_amd64.deb
-```
-
-### Build AppImage
-```bash
-python build.py --target=appimage
-# Output: build/linux/build_appimage/SMarTrPlay_v4.0.0_x86_64.AppImage
-```
-
-### Build Windows EXE
-```bash
-python build.py --target=exe
-# Output: build/windows/SMarTrPlay_v4.0.0.exe
-```
-
-### Build All
-```bash
-python build.py --target=all
-```
-
----
-
-## 🛠️ Tech Stack
-
-| Component | Technology |
-|---|---|
-| **Language** | Python 3.8+ |
-| **GUI Framework** | PyQt5 |
-| **Media Player** | ffplay (FFmpeg) |
-| **Database** | SQLite3 (local cache, favorites, history) |
-| **IPTV Protocol** | Xtream Codes API, M3U/M3U8 parsing |
-| **Casting** | DLNA / UPnP |
-| **Packaging** | PyInstaller, fpm, AppImage, Flatpak, Snap |
-| **Design** | SMarTr Brand — Dark Blue (#0A1A2F) & Cyan (#00D9FF) |
-
----
-
-## 🎨 SMarTr Brand Design
-
-SMarTrPlay features the distinctive **SMarTrAgents brand design**:
-- **Primary Color**: Dark Blue `#0A1A2F` — deep, professional background
-- **Accent Color**: Cyan `#00D9FF` — vibrant highlights and active states
-- **Slate Tones**: `#1E2D3F` / `#2A3D5C` — card surfaces and panels
-- **Typography**: Clean sans-serif, optimized for readability on TV screens
-- **Minimalist UI**: No clutter, content-first design philosophy
+If SMarTrPlay is useful to you, a ⭐ on this repository helps other people find it.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
----
+```
+Copyright (c) 2026 SMarTrAgents (smartragents.ai)
 
-## 🔗 Links
+SMarTrAgents.ai by ₳K₳ŦØŇǤƗɆ with Fable 5 (Anthropic) — built in partnership.
+SMarTrAgents.ai von ₳K₳ŦØŇǤƗɆ mit Fable 5 (Anthropic) — in Partnerschaft gebaut.
+```
 
-- 🌐 Website: [smartragents.ai](https://smartragents.ai)
-- 📧 Email: akatongie@smartragents.ai
-- 💬 Telegram: [@SMartrAgents](https://t.me/SMartrAgents)
-- 🐛 Issues: [GitHub Issues](../../issues)
-- 📦 Releases: [GitHub Releases](../../releases)
+**English:** MIT licensed. Free to use, change and share, including commercially. SMarTrPlay
+contains no copyrighted media and no access to any service.
+
+**Deutsch:** MIT-Lizenz. Frei nutzbar, veränderbar und weitergebbar, auch gewerblich.
+SMarTrPlay enthält keine geschützten Inhalte und keinen Zugang zu irgendeinem Dienst.
 
 ---
 
 <div align="center">
 
-**SMarTrPlay** — Part of the SMarTrAgents ecosystem  
-© 2026 SMartrAgents / Karl Heinz Marko
+**[⬇️ Download](https://github.com/SMarTrAgents/smartrplay/releases/latest)** ·
+**[🌐 smartragents.ai](https://smartragents.ai)** ·
+**[🐛 Report a bug](https://github.com/SMarTrAgents/smartrplay/issues)**
+
+*IPTV player · Xtream Codes player · M3U player · free IPTV player for Windows ·
+IPTV player Linux AppImage · open source IPTV player with EPG*
 
 </div>

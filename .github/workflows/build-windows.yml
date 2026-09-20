@@ -1,25 +1,59 @@
-name: Build Windows EXE
+name: Windows-Installer bauen
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build-windows:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install PyQt5 pyinstaller
-      - run: pyinstaller build/windows/smartrplay.spec --clean --distpath dist --workpath build
+
+      - name: Abhaengigkeiten
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Version bestimmen
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "wert=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "wert=0.0.0-test" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Programmdatei bauen
+        run: pyinstaller build/windows/smartrplay.spec --noconfirm --clean --distpath dist --workpath build/work
+
+      - name: Startprobe
+        shell: pwsh
+        run: |
+          if (-Not (Test-Path dist/SMarTrPlay.exe)) { throw "SMarTrPlay.exe fehlt" }
+          $groesse = (Get-Item dist/SMarTrPlay.exe).Length / 1MB
+          Write-Host ("Programmdatei gebaut: {0:N1} MB" -f $groesse)
+          if ($groesse -lt 10) { throw "Programmdatei ist verdaechtig klein" }
+
+      - name: Installer bauen
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMeineVersion=${{ steps.version.outputs.wert }} build\windows\smartrplay.iss
+
       - uses: actions/upload-artifact@v4
         with:
-          name: SMarTrPlay-Windows
-          path: dist/SMarTrPlay/
+          name: SMarTrPlay-Windows-Installer
+          path: dist/SMarTrPlay-Setup-*.exe
+
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/SMarTrPlay/SMarTrPlay.exe
+          files: dist/SMarTrPlay-Setup-*.exe

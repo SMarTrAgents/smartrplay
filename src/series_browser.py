@@ -6,13 +6,20 @@ Improved version with:
 - Cover thumbnails with disk caching (~/.cache/smartrplay/series_covers/)
 - Search/filter field for series names
 - Separate seasons and episodes lists
-- Async cover loading (SeriesCoverLoader)
+- Async cover loading (SeriesCoverLoaderThread — single queued thread)
 - Async series info loading (SeriesInfoLoaderThread)
 - Series info panel (name, plot, rating, genre)
 - SMarTr brand design (#0A0F1E, #1BF1FB, #8D7CF6)
+
+FD-Leak Fixes (EMFILE/GWakeup):
+- Single queued cover-loader thread replaces per-item QThread spawning
+- _cleanup_bg_threads() prunes finished threads before creating new ones
+- Search filters by hide/show instead of repopulating (no new threads per keystroke)
+- closeEvent properly calls quit()+wait()+deleteLater() and clears all references
 """
 
 import os
+import time
 import hashlib
 import urllib.request
 
@@ -21,8 +28,12 @@ from PyQt5.QtWidgets import (
     QListWidget, QListWidgetItem, QLabel, QPushButton,
     QLineEdit, QProgressBar, QMessageBox, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QMutex, QTimer
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QColor
+
+# Obergrenze der angezeigten Suchtreffer. Der Anbieter fuehrt 37623 Serien;
+# eine ungedeckelte Trefferliste wuerde die Oberflaeche lange blockieren.
+MAX_TREFFER_SUCHE = 500
 
 from xtream_api import XtreamAPI
 from player import PlayerBackend
@@ -31,6 +42,7 @@ from theme import (
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
     ACCENT_CYAN, ACCENT_PURPLE, ACCENT_VIOLET, get_font
 )
+import fadenpark
 
 # ----------------------------------------------------------------------
 # Constants
@@ -42,16 +54,29 @@ COVER_THUMB_H = 90
 
 
 # ----------------------------------------------------------------------
-# Background Threads
+# Thread-Entsorgung
 # ----------------------------------------------------------------------
+
+def thread_sicher_entsorgen(thread, ablage, wartezeit_ms=3000, name=""):
+    """QThread sicher entsorgen. Leitet auf den zentralen Fadenpark weiter.
+
+    Die frueher hier eingebaute Fassung hat einen noch laufenden Faden zwar in
+    eine Liste gehaengt, ihn aber NICHT von seinem Elternfenster geloest. Da
+    die Ladefaeden mit dem Fenster als Qt-Elternobjekt erzeugt werden, hat Qt
+    sie beim Loeschen des Fensters trotzdem mitgerissen. Gemessen am
+    19.09.2026 beim Providerwechsel waehrend eines laufenden Serienabrufs.
+    Der Fadenpark nabelt den Faden ab und haelt ihn modulweit fest.
+    Der Parameter ablage bleibt aus Vertraeglichkeitsgruenden erhalten.
+    """
+    fadenpark.entsorge_faden(thread, wartezeit_ms=wartezeit_ms, name=name)
 
 class CategoryLoaderThread(QThread):
     """Laedt Series-Kategorien im Hintergrund."""
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
 
-    def __init__(self, api):
-        super().__init__()
+    def __init__(self, api, parent=None):
+        super().__init__(parent)
         self.api = api
 
     def run(self):
@@ -67,8 +92,8 @@ class SeriesLoaderThread(QThread):
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
 
-    def __init__(self, api, category_id=None):
-        super().__init__()
+    def __init__(self, api, category_id=None, parent=None):
+        super().__init__(parent)
         self.api = api
         self.category_id = category_id
 
@@ -85,8 +110,8 @@ class SeriesInfoLoaderThread(QThread):
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
 
-    def __init__(self, api, series_id):
-        super().__init__()
+    def __init__(self, api, series_id, parent=None):
+        super().__init__(parent)
         self.api = api
         self.series_id = series_id
 
@@ -98,30 +123,66 @@ class SeriesInfoLoaderThread(QThread):
             self.error.emit(str(e))
 
 
-class SeriesCoverLoader(QThread):
-    """Laedt ein Cover-Bild asynchron mit lokalem Caching."""
+class SeriesCoverLoaderThread(QThread):
+    """Laedt Cover-Bilder sequentiell im Hintergrund (single thread, queued).
+
+    Replaces the old per-item SeriesCoverLoader pattern that spawned
+    one QThread per series cover, causing EMFILE (too many open files)
+    due to GLib GWakeup pipe allocation per QThread.
+    """
+
     cover_loaded = pyqtSignal(str, QPixmap)  # series_id, pixmap
 
-    def __init__(self, series_id, cover_url, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.series_id = str(series_id)
-        self.cover_url = cover_url
+        self._queue = []          # list of (series_id, cover_url) tuples
+        self._running = False
+        self._mutex = QMutex()
+
+    def load_covers(self, items):
+        """Liste von (series_id, cover_url) zum Laden hinzufuegen und Thread starten.
+
+        Args:
+            items: list of (series_id: str, cover_url: str) tuples
+        """
+        self._mutex.lock()
+        self._queue = list(items)
+        self._mutex.unlock()
+        if not self.isRunning():
+            self.start()
 
     def run(self):
-        try:
-            pixmap = self._load_cover()
-            if pixmap:
-                self.cover_loaded.emit(self.series_id, pixmap)
-        except Exception:
-            pass
+        self._running = True
+        while self._running:
+            self._mutex.lock()
+            if self._queue:
+                series_id, cover_url = self._queue.pop(0)
+            else:
+                series_id, cover_url = None, None
+            self._mutex.unlock()
 
-    def _load_cover(self):
+            if series_id is None:
+                break
+
+            pixmap = self._load_cover(cover_url)
+            if pixmap:
+                self.cover_loaded.emit(series_id, pixmap)
+
+    def stop(self):
+        """Thread anhalten und Warteschlange leeren."""
+        self._running = False
+        self._mutex.lock()
+        self._queue.clear()
+        self._mutex.unlock()
+
+    @staticmethod
+    def _load_cover(cover_url):
         """Cover aus Cache oder per Download laden und als QPixmap zurueckgeben."""
-        if not self.cover_url:
+        if not cover_url:
             return None
 
         os.makedirs(COVER_CACHE_DIR, exist_ok=True)
-        url_hash = hashlib.md5(self.cover_url.encode("utf-8")).hexdigest()
+        url_hash = hashlib.md5(cover_url.encode("utf-8")).hexdigest()
         cache_path = os.path.join(COVER_CACHE_DIR, url_hash + ".jpg")
 
         # 1) Cache pruefen
@@ -135,7 +196,7 @@ class SeriesCoverLoader(QThread):
 
         # 2) Download mit urllib.request
         try:
-            req = urllib.request.Request(self.cover_url, headers={
+            req = urllib.request.Request(cover_url, headers={
                 "User-Agent": "SMarTrPlay/1.0"
             })
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -177,15 +238,27 @@ class SeriesBrowser(QDialog):
         self.current_series_id = None
         self.current_season_key = None
         self.all_series = []           # vollstaendige Series-Liste fuer Suche
+        # Mastersuche: der gesamte Serienbestand ueber ALLE Kategorien, einmal
+        # geholt und behalten. Ohne ihn traefe die Suche nur die gewaehlte
+        # Kategorie, und das sind bei diesem Anbieter 49 von 207 Sammlungen.
+        self._gesamtbestand = None
+        self._suche_laeuft = False
+        self._suche_offen = None
+        self._bestand_thread = None
         self._seasons_dict = {}        # season_key -> [episodes]
-        self._cover_loaders = []       # aktive Cover-Loader referenzen
-        self._bg_threads = []          # aktive Hintergrund-Threads
+
+        # Thread management — single instances, properly cleaned up
+        self._cover_loader = None      # single SeriesCoverLoaderThread
+        self._bg_threads = []          # aktive Hintergrund-Threads (pruned regularly)
+        self._zombie_threads = []      # noch laufende Faeden, die spaeter aufgeraeumt werden
+        self._letzte_aktivierung = 0.0  # Zeitschutz gegen doppelte Aktivierung
 
         self.setWindowTitle("SMarTrPlay - Series Browser")
         self.setMinimumSize(1100, 650)
         self.setStyleSheet(self._build_stylesheet())
 
         self._build_ui()
+        self._init_cover_loader()
         self._load_categories()
         self._load_series()
 
@@ -310,6 +383,9 @@ class SeriesBrowser(QDialog):
         self.episodes_list.itemDoubleClicked.connect(
             self._on_episode_double_clicked
         )
+        # Zusaetzlich itemActivated verbinden, damit die Eingabetaste
+        # dieselbe Aktion ausloest (Tastaturbedienung).
+        self.episodes_list.itemActivated.connect(self._on_episode_double_clicked)
         episodes_l.addWidget(self.episodes_list)
 
         right_splitter.addWidget(seasons_widget)
@@ -452,6 +528,36 @@ class SeriesBrowser(QDialog):
         )
 
     # ------------------------------------------------------------------
+    # Thread Management
+    # ------------------------------------------------------------------
+
+    def _init_cover_loader(self):
+        """Single Cover-Loader Thread initialisieren."""
+        self._cover_loader = SeriesCoverLoaderThread(self)
+        self._cover_loader.cover_loaded.connect(self._on_cover_loaded)
+
+    def _cleanup_bg_threads(self):
+        """Fertige Hintergrund-Threads aufraeumen, laufende behalten."""
+        alive = []
+        for t in self._bg_threads:
+            if t.isRunning():
+                alive.append(t)
+            else:
+                # Thread ist fertig — sicher entsorgen
+                thread_sicher_entsorgen(
+                    t, self._zombie_threads, name="Series-Lader"
+                )
+        self._bg_threads = alive
+
+    def _stop_bg_threads(self):
+        """Alle Hintergrund-Threads stoppen (fuer closeEvent / refresh)."""
+        for t in self._bg_threads:
+            thread_sicher_entsorgen(
+                t, self._zombie_threads, name="Series-Lader"
+            )
+        self._bg_threads.clear()
+
+    # ------------------------------------------------------------------
     # Categories
     # ------------------------------------------------------------------
 
@@ -464,12 +570,14 @@ class SeriesBrowser(QDialog):
         all_item.setData(Qt.UserRole, None)
         self.category_list.addItem(all_item)
 
-        loader = CategoryLoaderThread(self.api)
-        self._bg_threads.append(loader)
+        self._cleanup_bg_threads()
+
+        loader = CategoryLoaderThread(self.api, self)
         loader.finished.connect(self._on_categories_loaded)
         loader.error.connect(
             lambda e: self.status_label.setText("Kategorie-Fehler: " + e)
         )
+        self._bg_threads.append(loader)
         loader.start()
 
     def _on_categories_loaded(self, categories):
@@ -492,6 +600,12 @@ class SeriesBrowser(QDialog):
 
     def _on_refresh(self):
         """Aktualisieren: Kategorien und Series neu laden."""
+        # Cover-Loader stoppen und Queue leeren
+        if self._cover_loader:
+            self._cover_loader.stop()
+            self._cover_loader.wait(2000)
+
+        self._stop_bg_threads()
         self._load_categories()
         self._load_series()
 
@@ -509,10 +623,18 @@ class SeriesBrowser(QDialog):
         self.progress.show()
         self.status_label.setText("Lade Series...")
 
-        loader = SeriesLoaderThread(self.api, category_id)
-        self._bg_threads.append(loader)
+        # Cover-Loader Queue leeren (neue Series werden gleich geladen)
+        if self._cover_loader:
+            self._cover_loader.stop()
+            self._cover_loader.wait(1000)
+            self._cover_loader.start()  # Thread wieder fuer neue Covers bereit
+
+        self._cleanup_bg_threads()
+
+        loader = SeriesLoaderThread(self.api, category_id, self)
         loader.finished.connect(self._on_series_loaded)
         loader.error.connect(self._on_series_error)
+        self._bg_threads.append(loader)
         loader.start()
 
     def _on_series_loaded(self, series_list):
@@ -524,8 +646,10 @@ class SeriesBrowser(QDialog):
         self._populate_series_list(series_list)
 
     def _populate_series_list(self, series_list):
-        """Series-Liste fuellen und Cover-Loader starten."""
+        """Series-Liste fuellen und Cover-Loader starten (single queued thread)."""
         self.series_list.clear()
+
+        cover_items = []  # (series_id, cover_url) tuples for queued loading
 
         for item in series_list:
             name = item.get("name", "Unbekannt")
@@ -538,12 +662,13 @@ class SeriesBrowser(QDialog):
             list_item.setToolTip(name)
             self.series_list.addItem(list_item)
 
-            # Cover asynchron laden
+            # Cover fuer asynchrone Queue-Einreichung sammeln
             if cover:
-                loader = SeriesCoverLoader(series_id, cover, self)
-                loader.cover_loaded.connect(self._on_cover_loaded)
-                self._cover_loaders.append(loader)
-                loader.start()
+                cover_items.append((series_id, cover))
+
+        # Covers ueber single queued Thread laden (kein per-item QThread!)
+        if cover_items and self._cover_loader:
+            self._cover_loader.load_covers(cover_items)
 
     def _on_cover_loaded(self, series_id, pixmap):
         """Cover-Bild fuer das passende Series-Item setzen."""
@@ -567,23 +692,78 @@ class SeriesBrowser(QDialog):
     # ------------------------------------------------------------------
 
     def _on_search_changed(self, text):
-        """Series-Liste nach Suchbegriff filtern."""
-        text = text.strip().lower()
-        if not text:
-            self._populate_series_list(self.all_series)
-            self.status_label.setText(
-                "{0} Series gefunden.".format(len(self.all_series))
-            )
-            return
+        """Suche ueber ALLE Kategorien, nicht nur ueber die gewaehlte.
 
-        filtered = [
-            s for s in self.all_series
-            if text in (s.get("name", "") or "").lower()
-        ]
-        self._populate_series_list(filtered)
-        self.status_label.setText(
-            "{0} Series gefunden (gefiltert).".format(len(filtered))
-        )
+        Ab zwei Zeichen wird der gesamte Serienbestand durchsucht. Er wird
+        einmal je Sitzung geholt und danach behalten. Bei leerem Feld kehrt
+        die Ansicht zur gewaehlten Kategorie zurueck.
+        """
+        text = (text or "").strip()
+        if not hasattr(self, "_such_timer"):
+            self._such_timer = QTimer(self)
+            self._such_timer.setSingleShot(True)
+            self._such_timer.timeout.connect(self._suche_ausfuehren)
+        self._suche_offen = text
+        if len(text) < 2:
+            self._such_timer.stop()
+            self._zurueck_zur_kategorie()
+            return
+        self._such_timer.start(350)
+
+    def _zurueck_zur_kategorie(self):
+        """Zeigt wieder die Serien der gewaehlten Kategorie."""
+        if self.all_series:
+            self._populate_series_list(self.all_series)
+            self.status_label.setText("{0} Series gefunden.".format(len(self.all_series)))
+
+    def _suche_ausfuehren(self):
+        text = (self._suche_offen or "").strip()
+        if len(text) < 2:
+            return
+        if self._gesamtbestand is not None:
+            self._treffer_zeigen(text)
+            return
+        if self._suche_laeuft:
+            return
+        self._suche_laeuft = True
+        self.status_label.setText("Suche ueber alle Kategorien, hole den Bestand...")
+        self.progress.show()
+        self._bestand_thread = SeriesLoaderThread(self.api, None, self)
+        self._bestand_thread.finished.connect(self._bestand_da)
+        self._bestand_thread.error.connect(self._bestand_fehler)
+        self._bg_threads.append(self._bestand_thread)
+        self._bestand_thread.start()
+
+    def _bestand_da(self, series_list):
+        self._suche_laeuft = False
+        self.progress.hide()
+        self._gesamtbestand = series_list or []
+        self._treffer_zeigen((self._suche_offen or "").strip())
+
+    def _bestand_fehler(self, fehler):
+        self._suche_laeuft = False
+        self.progress.hide()
+        self.status_label.setText("Suche nicht moeglich: {0}".format(fehler))
+
+    def _treffer_zeigen(self, text):
+        """Zeigt die Treffer aus dem Gesamtbestand in der Liste."""
+        klein = text.lower()
+        treffer = [e for e in (self._gesamtbestand or [])
+                   if klein in (e.get("name", "") or "").lower()]
+        gefunden = len(treffer)
+        if gefunden > MAX_TREFFER_SUCHE:
+            treffer = treffer[:MAX_TREFFER_SUCHE]
+        self._populate_series_list(treffer)
+        if gefunden == 0:
+            self.status_label.setText(
+                "Nichts gefunden zu \"{0}\" in allen Kategorien".format(text))
+        elif gefunden > len(treffer):
+            self.status_label.setText(
+                "{0} Treffer in allen Kategorien, die ersten {1} werden gezeigt".format(
+                    gefunden, len(treffer)))
+        else:
+            self.status_label.setText(
+                "{0} Treffer in allen Kategorien".format(gefunden))
 
     # ------------------------------------------------------------------
     # Series Info -> Seasons + Episodes
@@ -602,10 +782,12 @@ class SeriesBrowser(QDialog):
         self.progress.show()
         self.status_label.setText("Lade Info fuer: {0}...".format(item.text()))
 
-        loader = SeriesInfoLoaderThread(self.api, series_id)
-        self._bg_threads.append(loader)
+        self._cleanup_bg_threads()
+
+        loader = SeriesInfoLoaderThread(self.api, series_id, self)
         loader.finished.connect(self._on_series_info_loaded)
         loader.error.connect(self._on_series_info_error)
+        self._bg_threads.append(loader)
         loader.start()
 
     def _on_series_info_loaded(self, info):
@@ -795,8 +977,27 @@ class SeriesBrowser(QDialog):
     # Episode Playback
     # ------------------------------------------------------------------
 
+    def _aktion_freigeben(self):
+        """Zeitschutz gegen doppelte Aktivierung.
+
+        Ein Doppelklick loest itemDoubleClicked und itemActivated praktisch
+        gleichzeitig aus; ohne diesen Schutz wuerde die Wiedergabe doppelt
+        starten. Die Eingabetaste nutzt denselben Schutz.
+        """
+        jetzt = time.monotonic()
+        if jetzt - self._letzte_aktivierung < 0.3:
+            return False
+        self._letzte_aktivierung = jetzt
+        return True
+
     def _on_episode_double_clicked(self, item):
-        """Doppelklick auf Episode -> Stream mit Player abspielen."""
+        """Doppelklick oder Eingabetaste -> Stream mit Player abspielen.
+
+        Beide Signale feuern bei einem Doppelklick; der Zeitschutz in
+        _aktion_freigeben verhindert die doppelte Wiedergabe.
+        """
+        if not self._aktion_freigeben():
+            return
         ep_id = item.data(Qt.UserRole)
         if not ep_id:
             return
@@ -806,6 +1007,18 @@ class SeriesBrowser(QDialog):
 
         self.status_label.setText("Spiele: {0}".format(item.text()))
 
+        # Die Folge gehoert in die Videoflaeche der App, nicht in ein eigenes
+        # VLC-Fenster. Nur dort ist sie im Vollbild sichtbar und ueber die
+        # Bedienleiste steuerbar. Die ganze Staffel wird mitgegeben, damit im
+        # Vollbild durch die Folgen gezappt werden kann.
+        haupt = self.window()
+        if haupt is not None and hasattr(haupt, "spiele_in_videoflaeche"):
+            folgen, index = self._staffel_als_reihe(item)
+            if haupt.spiele_in_videoflaeche(url, item.text(), folgen, index):
+                return
+            self.status_label.setText("Playback fehlgeschlagen.")
+            return
+
         success = self.player.play(url)
         if not success:
             self.status_label.setText("Playback fehlgeschlagen.")
@@ -813,6 +1026,30 @@ class SeriesBrowser(QDialog):
                 self, "Playback Fehler",
                 "Konnte Episode nicht abspielen:\n" + url
             )
+
+    def _staffel_als_reihe(self, aktuelles_item):
+        """Die gerade angezeigte Staffel als Liste fuer das Zappen im Vollbild.
+
+        Liefert die Folgen in der Reihenfolge der Liste und die Nummer der
+        Folge, die gerade gestartet wird.
+        """
+        folgen = []
+        index = -1
+        for i in range(self.episodes_list.count()):
+            eintrag = self.episodes_list.item(i)
+            if eintrag is None:
+                continue
+            ep_id = eintrag.data(Qt.UserRole)
+            if not ep_id:
+                continue
+            ext = eintrag.data(Qt.UserRole + 1) or "mp4"
+            folgen.append({
+                "titel": eintrag.text(),
+                "url": self._build_series_url(ep_id, ext),
+            })
+            if eintrag is aktuelles_item:
+                index = len(folgen) - 1
+        return folgen, index
 
     def _build_series_url(self, episode_id, ext="mp4"):
         """Series Stream URL konstruieren.
@@ -833,13 +1070,19 @@ class SeriesBrowser(QDialog):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event):
-        """Auf laufende Threads warten vor dem Schliessen."""
-        for loader in self._cover_loaders:
-            if loader.isRunning():
-                loader.wait(3000)
-        for thread in self._bg_threads:
-            if thread.isRunning():
-                thread.wait(3000)
+        """Auf laufende Threads warten und alle Ressourcen freigeben vor dem Schliessen."""
+        # Cover-Loader stoppen (Queue leeren) und sicher entsorgen
+        if self._cover_loader:
+            self._cover_loader.stop()
+            thread_sicher_entsorgen(
+                self._cover_loader, self._zombie_threads,
+                name="SeriesCoverLoaderThread",
+            )
+            self._cover_loader = None
+
+        # Alle Hintergrund-Threads stoppen
+        self._stop_bg_threads()
+
         event.accept()
 
     # ------------------------------------------------------------------

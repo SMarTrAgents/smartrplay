@@ -1,0 +1,8 @@
+#!/bin/bash
+# AppImage Entry Point — SMarTrPlay
+# This script is executed when the AppImage is double-clicked or run.
+
+SELF="$(readlink -f "$0")"
+export APPDIR="${APPDIR:-$(dirname "$SELF")}"
+
+exec "$APPDIR/usr/bin/smartrplay" "$@"

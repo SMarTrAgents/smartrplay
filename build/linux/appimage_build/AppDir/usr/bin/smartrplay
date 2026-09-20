@@ -1,0 +1,25 @@
+#!/bin/bash
+# SMarTrPlay AppImage Launcher
+# SMarTrAgents IPTV Player
+
+APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")/..}"
+APP_SHARE="$APPDIR/usr/share/smartrplay"
+
+export PYTHONPATH="$APP_SHARE:$PYTHONPATH"
+
+# Wayland support (fallback to xcb if Wayland not available)
+if [ -n "$WAYLAND_DISPLAY" ]; then
+    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
+else
+    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+fi
+export QT_AUTO_SCREEN_SCALE_FACTOR=1
+
+# Check ffplay
+if ! command -v ffplay &> /dev/null; then
+    echo "WARNUNG: ffplay nicht gefunden. Video-Playback wird nicht funktionieren."
+    echo "Installieren mit: sudo apt install ffmpeg"
+fi
+
+cd "$APP_SHARE"
+exec python3 main.py "$@"

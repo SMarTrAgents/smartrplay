@@ -17,11 +17,13 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QLabel,
     QGroupBox,
+    QScrollArea,
+    QFrame,
     QSpacerItem,
     QSizePolicy,
     QWidget,
 )
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 
 from config import Config
@@ -55,7 +57,7 @@ QGroupBox {{
     padding: 20px 16px 16px 16px;
     color: {TEXT_SECONDARY};
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     background-color: {BG_CARD};
 }}
 QGroupBox::title {{
@@ -63,7 +65,7 @@ QGroupBox::title {{
     left: 16px;
     padding: 0 8px;
     color: {ACCENT_CYAN};
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 1px;
 }}
@@ -179,7 +181,7 @@ QLabel#settingsTitle {{
 }}
 QLabel#settingsSubtitle {{
     color: {TEXT_SECONDARY};
-    font-size: 12px;
+    font-size: 13px;
 }}
 QLabel#sectionLabel {{
     color: {TEXT_SECONDARY};
@@ -193,13 +195,23 @@ QLabel#valueLabel {{
 }}
 QLabel#brandFooter {{
     color: {TEXT_MUTED};
-    font-size: 10px;
+    font-size: 13px;
+}}
+QLabel#saveStatusLabel {{
+    color: {SUCCESS};
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 8px;
 }}
 """
 
 
 class SettingsDialog(QDialog):
     """Settings Dialog fuer SMarTrPlay mit SMarTr Brand Design."""
+
+    # Wird nach jedem erfolgreichen Speichern ausgesendet; eingebettet kann
+    # das Hauptfenster darauf reagieren, ohne den Reiterinhalt zu schließen.
+    einstellungen_gespeichert = pyqtSignal()
 
     # Setting keys
     KEY_VOLUME = "player_volume"
@@ -213,15 +225,32 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.config = config if config is not None else Config()
         self.setWindowTitle("SMarTrPlay - Einstellungen")
-        self.setMinimumSize(QSize(480, 620))
+        # Nur eine Mindestbreite und keine Mindesthoehe: eingebettet in einen
+        # Reiter muss der Inhalt in den verfuegbaren Platz passen, sonst waeren
+        # die unteren Knoepfe unerreichbar. Bei grosser Schrift scrollt die
+        # eingebaute QScrollArea.
+        self.setMinimumWidth(480)
         self.setStyleSheet(DIALOG_QSS)
 
         self._build_ui()
         self._load_settings()
 
+        # Blendet die Speicher-Bestaetigung nach 2 Sekunden wieder aus
+        self._bestaetigungstimer = QTimer(self)
+        self._bestaetigungstimer.setSingleShot(True)
+        self._bestaetigungstimer.timeout.connect(self.status_label.hide)
+
     def _build_ui(self):
-        """UI aufbauen."""
-        layout = QVBoxLayout(self)
+        """UI aufbauen; der Inhalt liegt in einer QScrollArea, damit bei grosser Schrift gescrollt werden kann."""
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
@@ -341,7 +370,7 @@ class SettingsDialog(QDialog):
         btn_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         self.cancel_btn = QPushButton("Abbrechen")
-        self.cancel_btn.clicked.connect(self.reject)
+        self.cancel_btn.clicked.connect(self._on_cancel)
         btn_layout.addWidget(self.cancel_btn)
 
         self.save_btn = QPushButton("Speichern")
@@ -350,6 +379,16 @@ class SettingsDialog(QDialog):
         btn_layout.addWidget(self.save_btn)
 
         layout.addLayout(btn_layout)
+
+        # Kurze Bestaetigung im Dialog selbst, nachdem eingebettet gespeichert wurde
+        self.status_label = QLabel("✓ Einstellungen gespeichert")
+        self.status_label.setObjectName("saveStatusLabel")
+        self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.status_label.hide()
+        layout.addWidget(self.status_label)
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
     def _populate_providers(self):
         """Provider-ComboBox aus Config fuellen."""
@@ -435,10 +474,42 @@ class SettingsDialog(QDialog):
         self.config.set_setting(self.KEY_DEFAULT_PROVIDER, self.provider_combo.currentData())
         self.config.set_setting(self.KEY_THEME, self.theme_combo.currentData())
 
+    def _ist_eingebettet(self):
+        """True, wenn der Dialog kein eigenes Fenster ist (z. B. in einen Reiter eingebettet)."""
+        return not bool(self.windowFlags() & Qt.Window)
+
+    def showEvent(self, event):
+        """Abbrechen-Knopf im eingebetteten Zustand ausblenden.
+
+        Die Fensterflags stehen beim ersten Sichtbarwerden fest; eingebettet
+        wuerde reject() den gesamten Reiterinhalt unsichtbar machen.
+        """
+        super().showEvent(event)
+        self.cancel_btn.setVisible(not self._ist_eingebettet())
+
+    def _on_cancel(self):
+        """Abbrechen: nur als eigenstaendiges Fenster schliessen."""
+        if not self._ist_eingebettet():
+            self.reject()
+
     def _save_and_close(self):
-        """Settings speichern und Dialog schliessen."""
+        """Einstellungen speichern und Signal aussenden.
+
+        Als eigenstaendiges Fenster wird der Dialog danach geschlossen (accept).
+        Eingebettet bleibt er sichtbar und bestaetigt das Speichern im Dialog
+        selbst, weil accept() den Reiterinhalt sonst verschwinden liesse.
+        """
         self._save_settings()
-        self.accept()
+        self.einstellungen_gespeichert.emit()
+        if self._ist_eingebettet():
+            self._zeige_bestaetigung()
+        else:
+            self.accept()
+
+    def _zeige_bestaetigung(self):
+        """Kurzen Bestaetigungshinweis anzeigen und nach 2 Sekunden ausblenden."""
+        self.status_label.show()
+        self._bestaetigungstimer.start(2000)
 
     def get_settings(self):
         """Aktuelle Settings als Dictionary zurueckgeben."""

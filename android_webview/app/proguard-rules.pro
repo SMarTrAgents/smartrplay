@@ -1,0 +1,2 @@
+-keep class ai.smartragents.smartrplay.** { *; }
+-keep class com.google.android.exoplayer2.** { *; }

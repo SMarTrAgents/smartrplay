@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>SMarTrPlay — Player</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background:#000;overflow:hidden }
+    .player-container { display:flex;flex-direction:column;width:100vw;height:100vh;background:#000 }
+    .player-header { display:flex;align-items:center;padding:16px 24px;background:rgba(10,15,30,0.9);position:absolute;top:0;left:0;right:0;z-index:10 }
+    .player-title { font-size:18px;font-weight:600;color:#fff }
+    .player-back { margin-right:16px;cursor:pointer;color:var(--brand-cyan);font-size:20px;padding:8px;border-radius:8px;outline:none }
+    .player-back:focus-visible { box-shadow:var(--focus-glow) }
+    #video-element { width:100%;flex:1;background:#000;object-fit:contain }
+  </style>
+</head>
+<body>
+  <div class="player-container">
+    <div class="player-header">
+      <div class="player-back" id="back-btn" tabindex="0">← Back</div>
+      <div class="player-title" id="player-title">SMarTrPlay</div>
+    </div>
+    <video id="video-element" controls autoplay tabindex="0"></video>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const streamUrl = urlParams.get('url');
+    const streamTitle = urlParams.get('title') || 'SMarTrPlay';
+
+    document.getElementById('player-title').textContent = decodeURIComponent(streamTitle);
+
+    const video = document.getElementById('video-element');
+    if (streamUrl) {
+      video.src = decodeURIComponent(streamUrl);
+      video.play().catch(e => console.error('Playback error:', e));
+    }
+
+    document.getElementById('back-btn').addEventListener('click', () => {
+      window.history.back();
+    });
+
+    document.getElementById('back-btn').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') window.history.back();
+    });
+  </script>
+</body>
+</html>

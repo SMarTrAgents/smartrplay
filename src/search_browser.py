@@ -8,6 +8,7 @@ Funktioniert mit Xtream Codes API und M3U (SQLite).
 import os
 import sys
 import json
+import time
 import urllib.request
 import urllib.parse
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -17,6 +18,7 @@ from PyQt5.QtWidgets import (
     QProgressBar, QComboBox, QMessageBox, QFrame
 )
 from PyQt5.QtGui import QPixmap, QIcon
+import fadenpark
 
 
 # === SMarTr Brand Colors ===
@@ -111,6 +113,23 @@ QFrame {{
 """
 
 
+# ----------------------------------------------------------------------
+# Thread-Entsorgung
+# ----------------------------------------------------------------------
+
+def thread_sicher_entsorgen(thread, ablage, wartezeit_ms=3000, name=""):
+    """QThread sicher entsorgen. Leitet auf den zentralen Fadenpark weiter.
+
+    Die frueher hier eingebaute Fassung hat einen noch laufenden Faden zwar in
+    eine Liste gehaengt, ihn aber NICHT von seinem Elternfenster geloest. Da
+    die Ladefaeden mit dem Fenster als Qt-Elternobjekt erzeugt werden, hat Qt
+    sie beim Loeschen des Fensters trotzdem mitgerissen. Gemessen am
+    19.09.2026 beim Providerwechsel waehrend eines laufenden Serienabrufs.
+    Der Fadenpark nabelt den Faden ab und haelt ihn modulweit fest.
+    Der Parameter ablage bleibt aus Vertraeglichkeitsgruenden erhalten.
+    """
+    fadenpark.entsorge_faden(thread, wartezeit_ms=wartezeit_ms, name=name)
+
 class SearchWorker(QThread):
     """Sucht im Hintergrund across Live, VOD und Series."""
     results_ready = pyqtSignal(list)
@@ -124,6 +143,15 @@ class SearchWorker(QThread):
         self.provider_id = None
         self.provider_type = None
         self.query = ""
+        self._abbruch = False
+
+    def cancel(self):
+        """Abbruchflag setzen; die Suche endet nach dem laufenden Schritt.
+
+        Der Faden ueberschreibt run() ohne exec_(), deshalb ist quit() bei
+        ihm wirkungslos — nur dieses Abbruchflag wirkt.
+        """
+        self._abbruch = True
 
     def setup_xtream(self, api, query):
         self.api = api
@@ -139,6 +167,10 @@ class SearchWorker(QThread):
     def run(self):
         try:
             results = []
+            if self._abbruch:
+                # Bereits abgebrochen, bevor der Faden ueberhaupt startete
+                self.results_ready.emit(results)
+                return
             if self.provider_type == "xtream":
                 results = self._search_xtream()
             else:
@@ -170,6 +202,10 @@ class SearchWorker(QThread):
         except Exception:
             pass
 
+        if self._abbruch:
+            # Abgebrochen: weitere Suchschritte nicht mehr anfassen
+            return results
+
         # VOD Streams (Filme)
         try:
             self.progress.emit("Durchsuche Filme (VOD)...")
@@ -188,6 +224,10 @@ class SearchWorker(QThread):
                     })
         except Exception:
             pass
+
+        if self._abbruch:
+            # Abgebrochen: weitere Suchschritte nicht mehr anfassen
+            return results
 
         # Series
         try:
@@ -212,6 +252,8 @@ class SearchWorker(QThread):
     def _search_m3u(self):
         """Durchsucht SQLite channels-Tabelle."""
         results = []
+        if self._abbruch:
+            return results
         q_lower = self.query.lower()
         channels = self.config.get_channels(
             provider_id=self.provider_id,
@@ -243,6 +285,8 @@ class SearchBrowser(QDialog):
         self.player = player
         self.results = []
         self.worker = None
+        self._zombie_threads = []       # noch laufende Faeden, die spaeter aufgeraeumt werden
+        self._letzte_aktivierung = 0.0  # Zeitschutz gegen doppelte Aktivierung
 
         self.setWindowTitle("SMarTrPlay - Globale Suche")
         self.setMinimumSize(800, 600)
@@ -314,6 +358,9 @@ class SearchBrowser(QDialog):
         # Ergebnis-Liste
         self.result_list = QListWidget()
         self.result_list.itemDoubleClicked.connect(self._on_result_double_click)
+        # Zusaetzlich itemActivated verbinden, damit die Eingabetaste
+        # dieselbe Aktion ausloest (Tastaturbedienung).
+        self.result_list.itemActivated.connect(self._on_result_double_click)
         layout.addWidget(self.result_list)
 
         # Info Label
@@ -337,10 +384,44 @@ class SearchBrowser(QDialog):
         btn_layout.addWidget(self.play_btn)
 
         self.close_btn = QPushButton("Schliessen")
-        self.close_btn.clicked.connect(self.close)
+        self.close_btn.clicked.connect(self._on_close_clicked)
+        self._close_btn_anpassen()
         btn_layout.addWidget(self.close_btn)
 
         layout.addLayout(btn_layout)
+
+    def _ist_eingebettet(self):
+        """Pruefen, ob dieser Dialog als Reiter-Widget eingebettet ist.
+
+        Eingebettet bedeutet: kein eigenes Fenster. Die windowFlags-Pruefung
+        allein genuegt nicht, weil Qt bei Widgets ohne Eltern das Fenster-Bit
+        erzwingt; der Vergleich mit window() deckt auch diesen Fall ab.
+        """
+        if int(self.windowFlags() & Qt.Window) == 0:
+            return True
+        return self.window() is not self
+
+    def _close_btn_anpassen(self):
+        """Schliessen-Knopf im eingebetteten Zustand ausblenden.
+
+        Als Reiter-Widget wuerde self.close() den gesamten Reiterinhalt
+        verschwinden lassen, und er kommt nicht wieder. Als eigenstaendiges
+        Fenster bleibt der Knopf wie bisher sichtbar.
+        """
+        eingebettet = self._ist_eingebettet()
+        self.close_btn.setVisible(not eingebettet)
+
+    def _on_close_clicked(self):
+        """Schliessen-Knopf: nur als eigenstaendiges Fenster wirklich schliessen."""
+        if self._ist_eingebettet():
+            return
+        self.close()
+
+    def showEvent(self, event):
+        """Beim Anzeigen erneut pruefen: main_window setzt die Fensterflags
+        erst nach der Erzeugung dieses Dialogs."""
+        super().showEvent(event)
+        self._close_btn_anpassen()
 
     def _do_search(self):
         """Startet die Suche."""
@@ -360,10 +441,21 @@ class SearchBrowser(QDialog):
         self.search_btn.setEnabled(False)
         self.search_input.setEnabled(False)
 
-        # Worker starten
-        if self.worker and self.worker.isRunning():
-            self.worker.quit()
-            self.worker.wait()
+        # Vorherigen Worker sicher entsorgen. Das bisherige wait() ohne
+        # Zeitlimit hat die Oberflaeche bis zu 45 Sekunden eingefroren
+        # (drei Xtream-Aufrufe mit je 15 Sekunden Zeitlimit). Die Signale
+        # werden getrennt, damit ein noch laufender alter Worker die neue
+        # Suche nicht mit veralteten Ergebnissen ueberschreibt.
+        if self.worker:
+            try:
+                self.worker.results_ready.disconnect()
+                self.worker.error_occurred.disconnect()
+                self.worker.progress.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            thread_sicher_entsorgen(
+                self.worker, self._zombie_threads, name="SearchWorker"
+            )
 
         self.worker = SearchWorker()
         if self.provider_type == "xtream" and self.api:
@@ -446,8 +538,23 @@ class SearchBrowser(QDialog):
         if item:
             self._play_item(item)
 
+    def _aktion_freigeben(self):
+        """Zeitschutz gegen doppelte Aktivierung.
+
+        Ein Doppelklick loest itemDoubleClicked und itemActivated praktisch
+        gleichzeitig aus; ohne diesen Schutz wuerde die Wiedergabe doppelt
+        starten. Der Abspielen-Knopf nutzt denselben Schutz.
+        """
+        jetzt = time.monotonic()
+        if jetzt - self._letzte_aktivierung < 0.3:
+            return False
+        self._letzte_aktivierung = jetzt
+        return True
+
     def _play_item(self, item):
-        """Spielt ausgewaehltes Ergebnis ab."""
+        """Spielt ausgewaehltes Ergebnis ab (Doppelklick, Eingabetaste oder Knopf)."""
+        if not self._aktion_freigeben():
+            return
         r = item.data(Qt.UserRole)
         if not r:
             return
@@ -494,6 +601,21 @@ class SearchBrowser(QDialog):
                 wid = 0
                 if container:
                     wid = int(container.winId())
+                else:
+                    # Rueckfall: Der Objektname "video_container" wird
+                    # nirgends vergeben, deshalb schlaegt findChild immer
+                    # fehl und beim Abspielen aus der Suche erschien kein
+                    # Bild. Wir suchen das Attribut am Elternfenster (nur
+                    # lesend) und nutzen dessen Fensterkennung.
+                    elternfenster = self.window()
+                    video_container = getattr(
+                        elternfenster, "video_container", None
+                    )
+                    if video_container is not None:
+                        try:
+                            wid = int(video_container.winId())
+                        except (AttributeError, TypeError, RuntimeError):
+                            wid = 0
                 self.player.play(url, wid)
                 self.status_bar_msg(f"Playback: {url[:60]}...")
             except Exception as e:
@@ -507,9 +629,11 @@ class SearchBrowser(QDialog):
             parent.status_bar.showMessage(msg, 3000)
 
     def closeEvent(self, event):
-        if self.worker and self.worker.isRunning():
-            self.worker.quit()
-            self.worker.wait()
+        """Worker sicher entsorgen statt unbegrenzt zu warten."""
+        thread_sicher_entsorgen(
+            self.worker, self._zombie_threads, name="SearchWorker"
+        )
+        self.worker = None
         event.accept()
 
 

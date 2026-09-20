@@ -3,7 +3,8 @@ __pycache__/
 *.pyo
 *.egg-info/
 dist/
-build/
+build/work/
+build/linux/arbeit/
 build_deb/
 build_appimage/
 *.deb
@@ -23,3 +24,11 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# Projektumgebung, wird mit neuerstellen aufgebaut
+.venv/
+__pycache__/
+*.pyc
+*.bak.*
+*.bak.*
+android_webview/app/build/
